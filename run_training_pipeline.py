@@ -13,6 +13,7 @@ from TrainingPipelines.ToucanTTS_Massive_stage1 import run as stage1
 from TrainingPipelines.ToucanTTS_Massive_stage2 import run as stage2
 from TrainingPipelines.ToucanTTS_MetaCheckpoint import run as meta
 from TrainingPipelines.ToucanTTS_Nancy import run as nancy
+from TrainingPipelines.Prosody import run as prosody
 from TrainingPipelines.finetuning_example_multilingual import run as fine_tuning_example_multilingual
 from TrainingPipelines.finetuning_example_simple import run as fine_tuning_example_simple
 
@@ -28,6 +29,7 @@ pipeline_dict = {
     "meta"                           : meta,
     "stage1"                         : stage1,
     "stage2"                         : stage2,
+    "prosody"                         : prosody,
     # training the aligner from scratch (not recommended, best to use provided checkpoint)
     "aligner"                        : aligner,
     # vocoder training (not recommended, best to use provided checkpoint)
