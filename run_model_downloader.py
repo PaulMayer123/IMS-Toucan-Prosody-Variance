@@ -19,7 +19,7 @@ def download_models():
     print("Downloading Aligner Model")
     os.makedirs(os.path.join(MODELS_DIR, "Aligner"), exist_ok=True)
     filename, headers = urllib.request.urlretrieve(
-        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v2-asvspoof/aligner.pt",
+        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v2.asvspoof/aligner.pt",
         filename=os.path.abspath(os.path.join(MODELS_DIR, "Aligner", "aligner.pt")),
         reporthook=report)
 
