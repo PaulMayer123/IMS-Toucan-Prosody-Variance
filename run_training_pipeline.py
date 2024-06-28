@@ -13,7 +13,7 @@ from TrainingPipelines.ToucanTTS_Massive_stage1 import run as stage1
 from TrainingPipelines.ToucanTTS_Massive_stage2 import run as stage2
 from TrainingPipelines.ToucanTTS_MetaCheckpoint import run as meta
 from TrainingPipelines.ToucanTTS_Nancy import run as nancy
-from TrainingPipelines.prosody import run as prosody
+from TrainingPipelines.ToucanTTS_Prosody import run as prosody
 from TrainingPipelines.finetuning_example_multilingual import run as fine_tuning_example_multilingual
 from TrainingPipelines.finetuning_example_simple import run as fine_tuning_example_simple
 

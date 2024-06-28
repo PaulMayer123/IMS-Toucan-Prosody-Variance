@@ -121,6 +121,42 @@ class CFMDecoder(torch.nn.Module):
                           u,
                           reduction="sum") / (torch.sum(mask) * u.shape[1])
         return loss, y
+    
+    def compute_loss_log(self, x1, mask, mu, c):
+        """Computes diffusion loss
+
+        Args:
+            x1 (torch.Tensor): Target
+                shape: (batch_size, n_feats, mel_timesteps)
+            mask (torch.Tensor): target mask
+                shape: (batch_size, 1, mel_timesteps)
+            mu (torch.Tensor): output of encoder
+                shape: (batch_size, n_feats, mel_timesteps)
+            c (torch.Tensor, optional): speaker condition.
+
+        Returns:
+            loss: conditional flow matching loss
+            y: conditional flow
+                shape: (batch_size, n_feats, mel_timesteps)
+        """
+        x1 = torch.exp(x1) - 1
+        x1 = x1.int().float()
+        b, _, t = mu.shape
+
+        # random timestep
+        t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
+        # sample noise p(x_0)
+        z = torch.randn_like(x1)
+
+        y = (1 - (1 - self.sigma_min) * t) * z + t * x1
+        u = x1 - (1 - self.sigma_min) * z
+        
+        int_y = torch.exp(self.estimator(y, mask, mu, t.squeeze(), c)) - 1
+        int_y = int_y.int().float()
+        loss = F.mse_loss(int_y,
+                          u,
+                          reduction="sum") / (torch.sum(mask) * u.shape[1])
+        return loss, y
 
 
 def create_plot_of_all_solutions(sol):

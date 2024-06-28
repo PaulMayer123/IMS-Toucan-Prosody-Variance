@@ -31,14 +31,14 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume, use_wandb, wandb
     if model_dir is not None:
         save_dir = model_dir
     else:
-        save_dir = os.path.join(MODELS_DIR, "ToucanTTS_Libri_Prosody")  # RENAME TO SOMETHING MEANINGFUL FOR YOUR DATA
+        save_dir = os.path.join(MODELS_DIR, "ToucanTTS_Libri_Prosody/CFM/epd_log_v3")  # RENAME TO SOMETHING MEANINGFUL FOR YOUR DATA
     os.makedirs(save_dir, exist_ok=True)
 
     train_data = prepare_tts_corpus(transcript_dict=build_path_to_transcript_dict_libritts_all_clean(),
                                     corpus_dir=os.path.join(PREPROCESSING_DIR, "libri"),
                                     lang="eng")  # CHANGE THE TRANSCRIPT DICT, THE NAME OF THE CACHE DIRECTORY AND THE LANGUAGE TO YOUR NEEDS
 
-    model = ToucanTTS()
+    model = ToucanTTS(prosody_order="epd", prosody_channels=8)
 
     if use_wandb:
         wandb.init(
@@ -51,15 +51,16 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume, use_wandb, wandb
                datasets=[train_data],
                device=device,
                save_directory=save_dir,
-               batch_size=12,  # YOU MIGHT GET OUT OF MEMORY ISSUES ON SMALL GPUs, IF SO, DECREASE THIS.
+               batch_size=16,  # YOU MIGHT GET OUT OF MEMORY ISSUES ON SMALL GPUs, IF SO, DECREASE THIS.
                eval_lang="eng",  # THE LANGUAGE YOUR PROGRESS PLOTS WILL BE MADE IN
-               warmup_steps=500,
-               lr=1e-5,  # if you have enough data (over ~1000 datapoints) you can increase this up to 1e-4 and it will still be stable, but learn quicker.
+               warmup_steps=5000,
+               lr=1e-4,  # if you have enough data (over ~1000 datapoints) you can increase this up to 1e-4 and it will still be stable, but learn quicker.
                # DOWNLOAD THESE INITIALIZATION MODELS FROM THE RELEASE PAGE OF THE GITHUB OR RUN THE DOWNLOADER SCRIPT TO GET THEM AUTOMATICALLY
                path_to_checkpoint=None, #os.path.join(MODELS_DIR, "ToucanTTS_Meta", "best.pt") if resume_checkpoint is None else resume_checkpoint,
                fine_tune=True if resume_checkpoint is None and not resume else finetune,
                resume=resume,
-               steps=5000,
+               steps=150000,
+               steps_per_checkpoint=1000,
                use_wandb=use_wandb,
                train_samplers=[torch.utils.data.RandomSampler(train_data)],
                gpu_count=1)

@@ -33,7 +33,7 @@ class ToucanTTSInterface(torch.nn.Module):
         if not tts_model_path.endswith(".pt"):
             # default to shorthand system
             tts_model_path = os.path.join(MODELS_DIR, f"ToucanTTS_{tts_model_path}", "best.pt")
-
+        
         ################################
         #   build text to phone        #
         ################################
@@ -136,7 +136,7 @@ class ToucanTTSInterface(torch.nn.Module):
                 input_is_phones=False,
                 return_plot_as_filepath=False,
                 loudness_in_db=-24.0,
-                prosody_creativity=0.5):
+                prosody_creativity=0.7):
         """
         duration_scaling_factor: reasonable values are 0.8 < scale < 1.2.
                                      1.0 means no scaling happens, higher values increase durations for the whole
@@ -232,7 +232,7 @@ class ToucanTTSInterface(torch.nn.Module):
                      dur_list=None,
                      pitch_list=None,
                      energy_list=None,
-                     prosody_creativity=0.5):
+                     prosody_creativity=0.7):
         """
         Args:
             silent: Whether to be verbose about the process
@@ -283,7 +283,7 @@ class ToucanTTSInterface(torch.nn.Module):
                    pitch_variance_scale=1.0,
                    energy_variance_scale=1.0,
                    blocking=False,
-                   prosody_creativity=0.5):
+                   prosody_creativity=0.7):
         if text.strip() == "":
             return
         wav, sr = self(text,
@@ -299,3 +299,52 @@ class ToucanTTSInterface(torch.nn.Module):
             plt.show()
         if blocking:
             sounddevice.wait()
+
+    def get_wave(self,
+                   text,
+                   view=False,
+                   duration_scaling_factor=1.0,
+                   pitch_variance_scale=1.0,
+                   energy_variance_scale=1.0,
+                   blocking=False,
+                   prosody_creativity=0.7):
+        if text.strip() == "":
+            return
+        wav, sr = self(text,
+                       view,
+                       duration_scaling_factor=duration_scaling_factor,
+                       pitch_variance_scale=pitch_variance_scale,
+                       energy_variance_scale=energy_variance_scale,
+                       prosody_creativity=prosody_creativity)
+        silence = torch.zeros([sr // 2])
+        wav = torch.cat((silence, torch.tensor(wav), silence), 0).numpy()
+        return wav, sr
+
+    def get_prosody_values(self,
+                text,
+                duration_scaling_factor=1.0,
+                pitch_variance_scale=1.0,
+                energy_variance_scale=1.0,
+                pause_duration_scaling_factor=1.0,
+                durations=None,
+                pitch=None,
+                energy=None,
+                input_is_phones=False,
+                prosody_creativity=0.7):
+        if text.strip() == "":
+            return
+        with torch.inference_mode():
+            phones = self.text2phone.string_to_tensor(text, input_phonemes=input_is_phones).to(torch.device(self.device))
+            _ , durations, pitch, energy = self.phone2mel(phones,
+                                                           return_duration_pitch_energy=True,
+                                                           utterance_embedding=self.default_utterance_embedding,
+                                                           durations=durations,
+                                                           pitch=pitch,
+                                                           energy=energy,
+                                                           lang_id=self.lang_id,
+                                                           duration_scaling_factor=duration_scaling_factor,
+                                                           pitch_variance_scale=pitch_variance_scale,
+                                                           energy_variance_scale=energy_variance_scale,
+                                                           pause_duration_scaling_factor=pause_duration_scaling_factor,
+                                                           prosody_creativity=prosody_creativity)
+            return self.text2phone.get_phone_string(text, for_plot_labels=True), durations, pitch, energy

@@ -103,6 +103,7 @@ def train_loop(net,
     duration_losses_total = list()
     pitch_losses_total = list()
     energy_losses_total = list()
+    prosody_losses_total = list()
     while True:
         net.train()
         epoch += 1
@@ -130,33 +131,54 @@ def train_loop(net,
 
             train_loss = 0.0
             utterance_embedding = batch[9].to(device)
-            regression_loss, glow_loss, duration_loss, pitch_loss, energy_loss = net(
-                text_tensors=text_tensors,
-                text_lengths=text_lengths,
-                gold_speech=gold_speech,
-                speech_lengths=speech_lengths,
-                gold_durations=gold_durations,
-                gold_pitch=gold_pitch,
-                gold_energy=gold_energy,
-                utterance_embedding=utterance_embedding,
-                lang_ids=lang_ids,
-                return_feats=False,
-                run_glow=run_glow
-            )
+            if net.config["prosody_order"] != "all":
+                regression_loss, glow_loss, duration_loss, pitch_loss, energy_loss = net(
+                    text_tensors=text_tensors,
+                    text_lengths=text_lengths,
+                    gold_speech=gold_speech,
+                    speech_lengths=speech_lengths,
+                    gold_durations=gold_durations,
+                    gold_pitch=gold_pitch,
+                    gold_energy=gold_energy,
+                    utterance_embedding=utterance_embedding,
+                    lang_ids=lang_ids,
+                    return_feats=False,
+                    run_glow=run_glow
+                )
+                if torch.isnan(regression_loss) or torch.isnan(duration_loss) or torch.isnan(pitch_loss) or torch.isnan(energy_loss):
+                    print("One of the losses turned to NaN! Skipping this batch ...")
+                    continue
 
-            if torch.isnan(regression_loss) or torch.isnan(duration_loss) or torch.isnan(pitch_loss) or torch.isnan(energy_loss):
-                print("One of the losses turned to NaN! Skipping this batch ...")
-                continue
+                train_loss = train_loss + duration_loss
+                train_loss = train_loss + pitch_loss
+                train_loss = train_loss + energy_loss
 
-            train_loss = train_loss + duration_loss
-            train_loss = train_loss + pitch_loss
-            train_loss = train_loss + energy_loss
-            train_loss = train_loss + regression_loss
+                duration_losses_total.append(duration_loss.item())
+                pitch_losses_total.append(pitch_loss.item())
+                energy_losses_total.append(energy_loss.item())
+            else:
+                regression_loss, glow_loss, prosody_loss = net(
+                    text_tensors=text_tensors,
+                    text_lengths=text_lengths,
+                    gold_speech=gold_speech,
+                    speech_lengths=speech_lengths,
+                    gold_durations=gold_durations,
+                    gold_pitch=gold_pitch,
+                    gold_energy=gold_energy,
+                    utterance_embedding=utterance_embedding,
+                    lang_ids=lang_ids,
+                    return_feats=False,
+                    run_glow=run_glow
+                )
+                if torch.isnan(regression_loss) or torch.isnan(prosody_loss):
+                    print("One of the losses turned to NaN! Skipping this batch ...")
+                    continue
+
+                train_loss = train_loss + prosody_loss
+                prosody_losses_total.append(prosody_loss.item())
 
             regression_losses_total.append(regression_loss.item())
-            duration_losses_total.append(duration_loss.item())
-            pitch_losses_total.append(pitch_loss.item())
-            energy_losses_total.append(energy_loss.item())
+            train_loss = train_loss + regression_loss
 
             if glow_loss is not None:
 
@@ -202,20 +224,29 @@ def train_loop(net,
                     print(f"Steps:                  {step_counter}\n")
 
                     if use_wandb:
-                        wandb.log({
-                            "regression_loss": round(sum(regression_losses_total) / len(regression_losses_total), 5),
-                            "glow_loss"      : round(sum(glow_losses_total) / len(glow_losses_total), 5),
-                            "duration_loss"  : round(sum(duration_losses_total) / len(duration_losses_total), 5),
-                            "pitch_loss"     : round(sum(pitch_losses_total) / len(pitch_losses_total), 5),
-                            "energy_loss"    : round(sum(energy_losses_total) / len(energy_losses_total), 5),
-                            "learning_rate"  : optimizer.param_groups[0]['lr']
-                        }, step=step_counter)
-                    regression_losses_total = list()
-                    glow_losses_total = list()
-                    duration_losses_total = list()
-                    pitch_losses_total = list()
-                    energy_losses_total = list()
-
+                        if net.config["prosody_order"] != "all":
+                            wandb.log({
+                                "regression_loss": round(sum(regression_losses_total) / len(regression_losses_total), 5),
+                                "glow_loss"      : round(sum(glow_losses_total) / len(glow_losses_total), 5),
+                                "duration_loss"  : round(sum(duration_losses_total) / len(duration_losses_total), 5),
+                                "pitch_loss"     : round(sum(pitch_losses_total) / len(pitch_losses_total), 5),
+                                "energy_loss"    : round(sum(energy_losses_total) / len(energy_losses_total), 5),
+                                "learning_rate"  : optimizer.param_groups[0]['lr']
+                            }, step=step_counter)
+                            duration_losses_total = list()
+                            pitch_losses_total = list()
+                            energy_losses_total = list()
+                        else:
+                            wandb.log({
+                                    "regression_loss": round(sum(regression_losses_total) / len(regression_losses_total), 5),
+                                    "glow_loss"      : round(sum(glow_losses_total) / len(glow_losses_total), 5),
+                                    "prosody_loss"  : round(sum(prosody_losses_total) / len(prosody_losses_total), 5),
+                                    "learning_rate"  : optimizer.param_groups[0]['lr']
+                                }, step=step_counter)
+                            prosody_losses_total = list()
+                        
+                        regression_losses_total = list()
+                        glow_losses_total = list()
                     path_to_most_recent_plot = plot_progress_spec_toucantts(model,
                                                                             device,
                                                                             save_dir=save_directory,

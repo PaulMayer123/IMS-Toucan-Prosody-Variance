@@ -16,29 +16,30 @@ def report(block_number, read_size, total_size):
 
 def download_models():
     #############
+    """
     print("Downloading Aligner Model")
     os.makedirs(os.path.join(MODELS_DIR, "Aligner"), exist_ok=True)
     filename, headers = urllib.request.urlretrieve(
         url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v3.0/aligner.pt",
         filename=os.path.abspath(os.path.join(MODELS_DIR, "Aligner", "aligner.pt")),
         reporthook=report)
-
+    
     #############
     print("Downloading Multilingual ToucanTTS Model")
     os.makedirs(os.path.join(MODELS_DIR, "ToucanTTS_Meta"), exist_ok=True)
     filename, headers = urllib.request.urlretrieve(
-        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v3.1/ToucanTTS_Meta.pt",
+        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v3.0/ToucanTTS_Meta.pt",
         filename=os.path.abspath(os.path.join(MODELS_DIR, "ToucanTTS_Meta", "best.pt")),
         reporthook=report)
-
+    """
     #############
     print("Downloading Vocoder")
     os.makedirs(os.path.join(MODELS_DIR, "Vocoder"), exist_ok=True)
     filename, headers = urllib.request.urlretrieve(
-        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v3.1/Vocoder.pt",
+        url="https://github.com/DigitalPhonetics/IMS-Toucan/releases/download/v3.0/Vocoder.pt",
         filename=os.path.abspath(os.path.join(MODELS_DIR, "Vocoder", "best.pt")),
         reporthook=report)
-
+    """
     #############
     print("Downloading Embedding GAN")
     os.makedirs(os.path.join(MODELS_DIR, "Embedding"), exist_ok=True)
@@ -63,5 +64,6 @@ def download_models():
         filename=os.path.abspath(os.path.join("Preprocessing/multilinguality", "asp_dict.pkl")),
         reporthook=report)
 
+    """
 if __name__ == '__main__':
     download_models()

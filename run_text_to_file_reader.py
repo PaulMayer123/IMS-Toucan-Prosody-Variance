@@ -90,24 +90,40 @@ def viet_poem(version, model_id="Meta", exec_device="cpu", speaker_reference=Non
                speaker_reference=speaker_reference,
                duration_scaling_factor=1.2)
 
+def variance_test(version, model_id="Meta", exec_device="cpu", speaker_reference=None):
+    os.makedirs("audios", exist_ok=True)
+
+    read_texts(model_id=model_id,
+               sentence=["It snowed, rained, and hailed the same morning.",
+                         "It snowed, rained, and hailed the same morning.",
+                         "It snowed, rained, and hailed the same morning.",
+                         "It snowed, rained, and hailed the same morning.",],
+               filename=f"audios/{version}_variance_test.wav",
+               device=exec_device,
+               language="eng",
+               speaker_reference=speaker_reference,
+               duration_scaling_factor=0.7)
+
 
 if __name__ == '__main__':
-    exec_device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"running on {exec_device}")
+    gpu_id = 3
+    torch.cuda.set_device(gpu_id)
+    device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
+    # merged_speaker_references = ["audios/speaker_references/" + ref for ref in os.listdir("audios/speaker_references/")]
+    """
+    sound_of_silence_single_utt(version="CFM_PED",
+                                model_id="Libri_Prosody/CFM/pitch_energy_duration",
+                                exec_device=exec_device)
 
-    merged_speaker_references = ["audios/speaker_references/" + ref for ref in os.listdir("audios/speaker_references/")]
+    die_glocke(version="CFM_PED",
+               model_id="Libri_Prosody/CFM/pitch_energy_duration",
+               exec_device=exec_device)
 
-    sound_of_silence_single_utt(version="new_voc",
-                                model_id="Meta",
-                                exec_device=exec_device,
-                                speaker_reference=merged_speaker_references)
-
-    die_glocke(version="new_voc",
-               model_id="Meta",
-               exec_device=exec_device,
-               speaker_reference=merged_speaker_references)
-
-    viet_poem(version="new_voc",
-              model_id="Meta",
-              exec_device=exec_device,
-              speaker_reference=merged_speaker_references)
+    the_raven(version="CFM_PED",
+              model_id="Libri_Prosody/CFM/pitch_energy_duration",
+              exec_device=exec_device)
+    """
+    variance_test(version="CFM_fast",
+              model_id="Libri_Prosody/CFM/epd_log_v2",
+              exec_device=device,
+              speaker_reference="audios/speaker_reference/100_121669_000013_000000.wav")
