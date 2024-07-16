@@ -203,7 +203,7 @@ class CodecAlignerDataset(Dataset):
                 print(f"{path} has a different sampling rate --> adapting the codec processor")
 
             try:
-                norm_wave = resample(torch.tensor(wave, device=device).float()).cpu()
+                norm_wave = resample(torch.tensor(wave, device=device).float())
             except ValueError:
                 continue
             dur_in_seconds = len(norm_wave) / 16000
@@ -212,6 +212,7 @@ class CodecAlignerDataset(Dataset):
                     print(f"Excluding {path} because of its duration of {round(dur_in_seconds, 2)} seconds.")
                 continue
             with torch.inference_mode():
+                
                 speech_timestamps = get_speech_timestamps(norm_wave, silero_model, sampling_rate=16000)
             try:
                 silence_timestamps = invert_segments(speech_timestamps, len(norm_wave))

@@ -32,7 +32,7 @@ class ToucanTTSInterface(torch.nn.Module):
         self.device = device
         if not tts_model_path.endswith(".pt"):
             # default to shorthand system
-            tts_model_path = os.path.join(MODELS_DIR, f"ToucanTTS_{tts_model_path}", "best.pt")
+            tts_model_path = os.path.join(MODELS_DIR, f"{tts_model_path}", "best.pt")
         
         ################################
         #   build text to phone        #

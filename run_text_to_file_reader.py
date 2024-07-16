@@ -101,8 +101,7 @@ def variance_test(version, model_id="Meta", exec_device="cpu", speaker_reference
                filename=f"audios/{version}_variance_test.wav",
                device=exec_device,
                language="eng",
-               speaker_reference=speaker_reference,
-               duration_scaling_factor=0.7)
+               speaker_reference=speaker_reference)
 
 
 if __name__ == '__main__':
@@ -123,7 +122,7 @@ if __name__ == '__main__':
               model_id="Libri_Prosody/CFM/pitch_energy_duration",
               exec_device=exec_device)
     """
-    variance_test(version="CFM_fast",
-              model_id="Libri_Prosody/CFM/epd_log_v2",
+    variance_test(version="epd_log_no_drop",
+              model_id="Libri_Prosody/CFM/epd_log_no_drop",
               exec_device=device,
               speaker_reference="audios/speaker_reference/100_121669_000013_000000.wav")

@@ -73,6 +73,8 @@ class ToucanTTS(torch.nn.Module):
         lang_emb_size = config.lang_emb_size
         integrate_language_embedding_into_encoder_out = config.integrate_language_embedding_into_encoder_out
         prosody_channels = config.prosody_channels
+        self.duration_log_scale = getattr(config, 'duration_log_scale', False)
+        self.dropout = getattr(config, 'dropout', True)
         self.prosody_order = getattr(config, 'prosody_order', 'epd')
         self.input_feature_dimensions = input_feature_dimensions
         self.attention_dimension = attention_dimension
@@ -243,34 +245,49 @@ class ToucanTTS(torch.nn.Module):
             input_energy=encoded_texts
 
             if self.prosody_order == "ped":
-                reduced_pitch_space = torchfunc.dropout(self.pitch_latent_reduction(encoded_texts), p=0.1).transpose(1, 2)
+                reduced_pitch_space = self.pitch_latent_reduction(encoded_texts)
+                if self.dropout:
+                    reduced_pitch_space = torchfunc.dropout(reduced_pitch_space, p=0.1)
+                reduced_pitch_space = reduced_pitch_space.transpose(1, 2)
                 pitch_predictions = self.pitch_predictor(mu=reduced_pitch_space, mask=text_masks.float(), n_timesteps=30, temperature=prosody_creativity, c=utterance_embedding) if gold_pitch is None else gold_pitch
                 pitch_predictions = _scale_variance(pitch_predictions, pitch_variance_scale)
                 embedded_pitch_curve = self.pitch_embed(pitch_predictions).transpose(1, 2)
                 input_energy = encoded_texts + embedded_pitch_curve
 
-            reduced_energy_space = torchfunc.dropout(self.energy_latent_reduction(input_energy), p=0.1).transpose(1, 2)
+            reduced_energy_space = self.energy_latent_reduction(input_energy)
+            if self.dropout:
+                torchfunc.dropout(reduced_energy_space, p=0.1)
+            reduced_energy_space = reduced_energy_space.transpose(1, 2)
             energy_predictions = self.energy_predictor(mu=reduced_energy_space, mask=text_masks.float(), n_timesteps=30, temperature=prosody_creativity, c=utterance_embedding) if gold_energy is None else gold_energy
             energy_predictions = _scale_variance(energy_predictions, energy_variance_scale)
             embedded_energy_curve = self.energy_embed(energy_predictions).transpose(1, 2)
             
             if self.prosody_order == "epd":
-                reduced_pitch_space = torchfunc.dropout(self.pitch_latent_reduction(encoded_texts + embedded_energy_curve), p=0.1).transpose(1, 2)
+                reduced_pitch_space = self.pitch_latent_reduction(encoded_texts + embedded_energy_curve)
+                if self.dropout:
+                    reduced_pitch_space = torchfunc.dropout(reduced_pitch_space, p=0.1)
+                reduced_pitch_space = reduced_pitch_space.transpose(1, 2)
                 pitch_predictions = self.pitch_predictor(mu=reduced_pitch_space, mask=text_masks.float(), n_timesteps=30, temperature=prosody_creativity, c=utterance_embedding) if gold_pitch is None else gold_pitch
                 pitch_predictions = _scale_variance(pitch_predictions, pitch_variance_scale)
                 embedded_pitch_curve = self.pitch_embed(pitch_predictions).transpose(1, 2)
 
-            reduced_duration_space = torchfunc.dropout(self.duration_latent_reduction(encoded_texts + embedded_pitch_curve + embedded_energy_curve), p=0.1).transpose(1, 2)
-            predicted_durations = torch.clamp(self.duration_predictor(mu=reduced_duration_space, mask=text_masks.float(), n_timesteps=30, temperature=prosody_creativity, c=utterance_embedding), min=0.0).long().squeeze(
+            reduced_duration_space = self.duration_latent_reduction(encoded_texts + embedded_pitch_curve + embedded_energy_curve)
+            if self.dropout:
+                reduced_duration_space = torchfunc.dropout(reduced_duration_space, p=0.1)
+            reduced_duration_space = reduced_duration_space.transpose(1, 2)
+            predicted_durations = torch.clamp(self.duration_predictor(mu=reduced_duration_space, mask=text_masks.float(), n_timesteps=30, temperature=prosody_creativity, c=utterance_embedding), min=0.0).squeeze(
                 1) if gold_durations is None else gold_durations
             
 
         else:
-            reduced_prosody_space = torchfunc.dropout(self.prosody_latent_reduction(encoded_texts), p=0.1).transpose(1, 2)
+            reduced_prosody_space = self.prosody_latent_reduction(encoded_texts)
+            if self.dropout:
+                torchfunc.dropout(reduced_prosody_space, p=0.1)
+            reduced_prosody_space = reduced_prosody_space.transpose(1, 2)
             predicted_prosody = self.prosody_predictor(mu=reduced_prosody_space, mask=text_masks.float(), n_timesteps=30, temperature=1.0, c=utterance_embedding) 
             
             predicted_durations = predicted_prosody[:, 0:1, :] 
-            predicted_durations = torch.clamp(predicted_prosody[:, 0:1, :], min=0.0).long().squeeze(1) if gold_durations is None else gold_durations
+            predicted_durations = torch.clamp(predicted_prosody[:, 0:1, :], min=0.0).squeeze(1) if gold_durations is None else gold_durations
                 
 
             pitch_predictions = predicted_prosody[:, 1:2, :] if gold_pitch is None else gold_pitch
@@ -284,9 +301,15 @@ class ToucanTTS(torch.nn.Module):
                 
         # change value range
         #predicted_durations = predicted_durations * 50 
+        
+        if self.duration_log_scale:
+            predicted_durations = torch.clamp(predicted_durations, min=0.0).squeeze(1)
+            predicted_durations = torch.exp(predicted_durations) - 1
+            predicted_durations = predicted_durations.long()
+        else:
+            predicted_durations = torch.clamp(torch.ceil(predicted_durations), min=0.0).long().squeeze(1)
+        
 
-        predicted_durations = torch.exp(predicted_durations) - 1
-        predicted_durations = predicted_durations.int()
             
         # modifying the predictions with control parameters
         for phoneme_index, phoneme_vector in enumerate(text_tensors.squeeze(0)):
