@@ -17,7 +17,8 @@ vis/
 Utility/storage_config.py
 Preprocessing/multilinguality/distance_datasets
 wandb
-
+samples/
+model/
 
 *_graph
 app.py
