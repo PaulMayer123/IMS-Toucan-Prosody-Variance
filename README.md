@@ -45,6 +45,19 @@ process, with which I am unfortunately not familiar.
 To install this toolkit, clone it onto the machine you want to use it on
 (should have at least one cuda enabled GPU if you intend to train models on that machine. For inference, you don't need
 a GPU).
+
+If you're using Linux, you should have the following packages installed, or install them with apt-get if you haven't (on
+most distributions they come pre-installed):
+
+```
+libsndfile1
+espeak-ng
+ffmpeg
+libasound-dev
+libportaudio2
+libsqlite3-dev
+```
+
 Navigate to the directory you have cloned. We recommend creating and activating a
 [virtual environment](https://docs.python.org/3/library/venv.html)
 to install the basic requirements into. The commands below summarize everything you need to do under Linux. If you are
@@ -103,7 +116,7 @@ For M1 Macs, the most convenient method to install espeak-ng onto your system is
 espeak-ng via
 
 ```
-sudo port install espeak-n
+sudo port install espeak-ng
 ```
 
 As stated in the Windows install instructions, the espeak-ng installation will need to be set as a variable for the
@@ -257,15 +270,25 @@ Here are a few points that were brought up by users:
 The basic PyTorch modules of FastSpeech 2 and GST are taken from
 [ESPnet](https://github.com/espnet/espnet), the PyTorch modules of
 HiFi-GAN are taken from the [ParallelWaveGAN repository](https://github.com/kan-bayashi/ParallelWaveGAN).
-Some modules related to the Glow based PostNet as outlined in PortaSpeech are taken
-from the [official PortaSpeech codebase](https://github.com/NATSpeech/NATSpeech).
-We use audio watermarking from [audioseal](https://github.com/facebookresearch/audioseal). For
-grapheme-to-phoneme conversion, we rely on the aforementioned eSpeak-NG as
+Some modules related to the ConditionalFlowMatching based PostNet as outlined in MatchaTTS are taken
+from the [official MatchaTTS codebase](https://github.com/shivammehta25/Matcha-TTS) and some are taken
+from [the StableTTS codebase](https://github.com/KdaiP/StableTTS).
+For grapheme-to-phoneme conversion, we rely on the aforementioned eSpeak-NG as
 well as [transphone](https://github.com/xinjli/transphone). We
 use [encodec, a neural audio codec](https://github.com/yangdongchao/AcademiCodec) as intermediate representation
 for caching the train data to save space.
 
 ## Citation 🐧
+
+If you find this repo useful, consider giving it a star. Large numbers make me happy, and they are quite motivating :)
+
+<a href="https://star-history.com/#DigitalPhonetics/IMS-Toucan&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=DigitalPhonetics/IMS-Toucan&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=DigitalPhonetics/IMS-Toucan&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=DigitalPhonetics/IMS-Toucan&type=Date" />
+ </picture>
+</a>
 
 ### Introduction of the Toolkit [[associated code and models]](https://github.com/DigitalPhonetics/IMS-Toucan/releases/tag/v1.0)
 

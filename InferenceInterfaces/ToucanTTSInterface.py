@@ -89,9 +89,12 @@ class ToucanTTSInterface(torch.nn.Module):
             speaker_embs = list()
             for path in path_to_reference_audio:
                 wave, sr = soundfile.read(path)
+                if len(wave.shape) > 1:  # oh no, we found a stereo audio!
+                    if len(wave[0]) == 2:  # let's figure out whether we need to switch the axes
+                        wave = wave.transpose()  # if yes, we switch the axes.
                 wave = librosa.to_mono(wave)
                 wave = Resample(orig_freq=sr, new_freq=16000).to(self.device)(torch.tensor(wave, device=self.device, dtype=torch.float32))
-                speaker_embedding = self.speaker_embedding_func_ecapa.encode_batch(wavs=wave.to(self.device).unsqueeze(0)).squeeze()
+                speaker_embedding = self.speaker_embedding_func_ecapa.encode_batch(wavs=wave.to(self.device).squeeze().unsqueeze(0)).squeeze()
                 speaker_embs.append(speaker_embedding)
             self.default_utterance_embedding = sum(speaker_embs) / len(speaker_embs)
 
@@ -106,7 +109,7 @@ class ToucanTTSInterface(torch.nn.Module):
         self.text2phone = ArticulatoryCombinedTextFrontend(language=lang_id, add_silence_to_end=True, device=self.device)
 
     def set_accent_language(self, lang_id):
-        if lang_id in ['ajp', 'ajt', 'lak', 'lno', 'nul', 'pii', 'plj', 'slq', 'smd', 'snb', 'tpw', 'wya', 'zua', 'en-us', 'en-sc', 'fr-be', 'fr-sw', 'pt-br', 'spa-lat', 'vi-ctr', 'vi-so']:
+        if lang_id in {'ajp', 'ajt', 'lak', 'lno', 'nul', 'pii', 'plj', 'slq', 'smd', 'snb', 'tpw', 'wya', 'zua', 'en-us', 'en-sc', 'fr-be', 'fr-sw', 'pt-br', 'spa-lat', 'vi-ctr', 'vi-so'}:
             if lang_id == 'vi-so' or lang_id == 'vi-ctr':
                 lang_id = 'vie'
             elif lang_id == 'spa-lat':
@@ -118,7 +121,7 @@ class ToucanTTSInterface(torch.nn.Module):
             elif lang_id == 'en-sc' or lang_id == 'en-us':
                 lang_id = 'eng'
             else:
-                # no clue where these others are even coming from, they are not in ISO 639-2
+                # no clue where these others are even coming from, they are not in ISO 639-3
                 lang_id = 'eng'
 
         self.lang_id = get_language_id(lang_id).to(self.device)
@@ -186,7 +189,12 @@ class ToucanTTSInterface(torch.nn.Module):
                 phones = text.replace(" ", "|")
             else:
                 phones = self.text2phone.get_phone_string(text, for_plot_labels=True)
-            ax.set_xticklabels(phones)
+            try:
+                ax.set_xticklabels(phones)
+            except IndexError:
+                pass
+            except ValueError:
+                pass
             word_boundaries = list()
             for label_index, phone in enumerate(phones):
                 if phone == "|":
@@ -218,6 +226,7 @@ class ToucanTTSInterface(torch.nn.Module):
 
             if return_plot_as_filepath:
                 plt.savefig("tmp.png")
+                plt.close()
                 return wave, sr, "tmp.png"
         return wave, sr
 
@@ -244,12 +253,19 @@ class ToucanTTSInterface(torch.nn.Module):
             duration_scaling_factor: reasonable values are 0.8 < scale < 1.2.
                                      1.0 means no scaling happens, higher values increase durations for the whole
                                      utterance, lower values decrease durations for the whole utterance.
+            pause_duration_scaling_factor: reasonable values are 0.8 < scale < 1.2.
+                                     1.0 means no scaling happens, higher values increase durations for the pauses,
+                                     lower values decrease durations for the whole utterance.
             pitch_variance_scale: reasonable values are 0.6 < scale < 1.4.
                                   1.0 means no scaling happens, higher values increase variance of the pitch curve,
                                   lower values decrease variance of the pitch curve.
             energy_variance_scale: reasonable values are 0.6 < scale < 1.4.
                                    1.0 means no scaling happens, higher values increase variance of the energy curve,
                                    lower values decrease variance of the energy curve.
+            prosody_creativity: sampling temperature of the generative model that comes up with the pitch, energy and
+                                durations. Higher values mena more variance, lower temperature means less variance across
+                                generations. reasonable values are between 0.0 and 1.2, anything higher makes the voice
+                                sound very weird.
         """
         if not dur_list:
             dur_list = []
@@ -257,7 +273,7 @@ class ToucanTTSInterface(torch.nn.Module):
             pitch_list = []
         if not energy_list:
             energy_list = []
-        silence = torch.zeros([14300])
+        silence = torch.zeros([400])
         wav = silence.clone()
         for (text, durations, pitch, energy) in itertools.zip_longest(text_list, dur_list, pitch_list, energy_list):
             if text.strip() != "":

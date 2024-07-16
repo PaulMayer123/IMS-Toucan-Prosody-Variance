@@ -40,13 +40,7 @@ def sound_of_silence_single_utt(version, model_id="Meta", exec_device="cpu", spe
     os.makedirs("audios", exist_ok=True)
 
     read_texts(model_id=model_id,
-               sentence=["""In restless dreams I walked alone,
-Narrow streets of cobblestone.
-Beneath the halo of a streetlamp,
-I turned my collar to the cold and damp,
-When my eyes were stabbed, by the flash of a neon light,
-That split the night.
-And touched the sound, of silence."""],
+               sentence=["In restless dreams I walked alone, Narrow streets of cobblestone. Beneath the halo of a streetlamp, I turned my collar to the cold and damp,  When my eyes were stabbed, by the flash of a neon light, That split the night. And touched the sound, of silence."],
                filename=f"audios/{version}_sound_of_silence_as_single_utterance.wav",
                device=exec_device,
                language="eng",

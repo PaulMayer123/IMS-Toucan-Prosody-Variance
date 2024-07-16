@@ -2,6 +2,7 @@
 
 
 import json
+import logging
 import re
 
 import torch
@@ -593,7 +594,8 @@ class ArticulatoryCombinedTextFrontend:
                                                         punctuation_marks=';:,.!?¡¿—…()"«»“”~/。【】、‥،؟“”؛',
                                                         preserve_punctuation=True,
                                                         language_switch='remove-flags',
-                                                        with_stress=self.use_stress)
+                                                        with_stress=self.use_stress,
+                                                        logger=logging.getLogger(__file__))
             except RuntimeError:
                 print("Error in loading espeak! \n"
                       "Maybe espeak is not installed on your system? \n"
@@ -662,96 +664,96 @@ class ArticulatoryCombinedTextFrontend:
 
         for char in phones:
             # affects following phoneme -----------------
-            if char == '\u02C8':
+            if char.strip() == '\u02C8':
                 # primary stress
                 stressed_flag = True
             # affects previous phoneme -----------------
-            elif char == '\u02D0':
+            elif char.strip() == '\u02D0':
                 # lengthened
                 phones_vector[-1][get_feature_to_index_lookup()["lengthened"]] = 1
-            elif char == '\u02D1':
+            elif char.strip() == '\u02D1':
                 # half length
                 phones_vector[-1][get_feature_to_index_lookup()["half-length"]] = 1
-            elif char == '\u0306':
+            elif char.strip() == '\u0306':
                 # shortened
                 phones_vector[-1][get_feature_to_index_lookup()["shortened"]] = 1
-            elif char == '̃' and phones_vector[-1][get_feature_to_index_lookup()["nasal"]] != 1:
+            elif char.strip() == '̃' and phones_vector[-1][get_feature_to_index_lookup()["nasal"]] != 1:
                 # nasalized (vowel)
                 phones_vector[-1][get_feature_to_index_lookup()["nasal"]] = 2
-            elif char == "̧" != phones_vector[-1][get_feature_to_index_lookup()["palatal"]] != 1:
+            elif char.strip() == "̧" != phones_vector[-1][get_feature_to_index_lookup()["palatal"]] != 1:
                 # palatalized
                 phones_vector[-1][get_feature_to_index_lookup()["palatal"]] = 2
-            elif char == "ʷ" and phones_vector[-1][get_feature_to_index_lookup()["labial-velar"]] != 1:
+            elif char.strip() == "ʷ" and phones_vector[-1][get_feature_to_index_lookup()["labial-velar"]] != 1:
                 # labialized
                 phones_vector[-1][get_feature_to_index_lookup()["labial-velar"]] = 2
-            elif char == "ʰ" and phones_vector[-1][get_feature_to_index_lookup()["aspirated"]] != 1:
+            elif char.strip() == "ʰ" and phones_vector[-1][get_feature_to_index_lookup()["aspirated"]] != 1:
                 # aspirated
                 phones_vector[-1][get_feature_to_index_lookup()["aspirated"]] = 2
-            elif char == "ˠ" and phones_vector[-1][get_feature_to_index_lookup()["velar"]] != 1:
+            elif char.strip() == "ˠ" and phones_vector[-1][get_feature_to_index_lookup()["velar"]] != 1:
                 # velarized
                 phones_vector[-1][get_feature_to_index_lookup()["velar"]] = 2
-            elif char == "ˁ" and phones_vector[-1][get_feature_to_index_lookup()["pharyngal"]] != 1:
+            elif char.strip() == "ˁ" and phones_vector[-1][get_feature_to_index_lookup()["pharyngal"]] != 1:
                 # pharyngealized
                 phones_vector[-1][get_feature_to_index_lookup()["pharyngal"]] = 2
-            elif char == "ˀ" and phones_vector[-1][get_feature_to_index_lookup()["glottal"]] != 1:
+            elif char.strip() == "ˀ" and phones_vector[-1][get_feature_to_index_lookup()["glottal"]] != 1:
                 # glottalized
                 phones_vector[-1][get_feature_to_index_lookup()["glottal"]] = 2
-            elif char == "ʼ" and phones_vector[-1][get_feature_to_index_lookup()["ejective"]] != 1:
+            elif char.strip() == "ʼ" and phones_vector[-1][get_feature_to_index_lookup()["ejective"]] != 1:
                 # ejective
                 phones_vector[-1][get_feature_to_index_lookup()["ejective"]] = 2
-            elif char == "̹" and phones_vector[-1][get_feature_to_index_lookup()["rounded"]] != 1:
+            elif char.strip() == "̹" and phones_vector[-1][get_feature_to_index_lookup()["rounded"]] != 1:
                 # rounding
                 phones_vector[-1][get_feature_to_index_lookup()["rounded"]] = 2
-            elif char == "̞" and phones_vector[-1][get_feature_to_index_lookup()["open"]] != 1:
+            elif char.strip() == "̞" and phones_vector[-1][get_feature_to_index_lookup()["open"]] != 1:
                 # open
                 phones_vector[-1][get_feature_to_index_lookup()["open"]] = 2
-            elif char == "̪" and phones_vector[-1][get_feature_to_index_lookup()["dental"]] != 1:
+            elif char.strip() == "̪" and phones_vector[-1][get_feature_to_index_lookup()["dental"]] != 1:
                 # dental
                 phones_vector[-1][get_feature_to_index_lookup()["dental"]] = 2
-            elif char == "̬" and phones_vector[-1][get_feature_to_index_lookup()["voiced"]] != 1:
+            elif char.strip() == "̬" and phones_vector[-1][get_feature_to_index_lookup()["voiced"]] != 1:
                 # voiced
                 phones_vector[-1][get_feature_to_index_lookup()["voiced"]] = 2
-            elif char == "̝" and phones_vector[-1][get_feature_to_index_lookup()["close"]] != 1:
+            elif char.strip() == "̝" and phones_vector[-1][get_feature_to_index_lookup()["close"]] != 1:
                 # closed
                 phones_vector[-1][get_feature_to_index_lookup()["close"]] = 2
-            elif char == "̰" and phones_vector[-1][get_feature_to_index_lookup()["glottal"]] != 1 and phones_vector[-1][get_feature_to_index_lookup()["epiglottal"]] != 1:
+            elif char.strip() == "̰" and phones_vector[-1][get_feature_to_index_lookup()["glottal"]] != 1 and phones_vector[-1][get_feature_to_index_lookup()["epiglottal"]] != 1:
                 # laryngalization
                 phones_vector[-1][get_feature_to_index_lookup()["glottal"]] = 2
                 phones_vector[-1][get_feature_to_index_lookup()["epiglottal"]] = 2
-            elif char == "̈" and phones_vector[-1][get_feature_to_index_lookup()["central"]] != 1:
+            elif char.strip() == "̈" and phones_vector[-1][get_feature_to_index_lookup()["central"]] != 1:
                 # centralization
                 phones_vector[-1][get_feature_to_index_lookup()["central"]] = 2
-            elif char == "̜" and phones_vector[-1][get_feature_to_index_lookup()["unrounded"]] != 1:
+            elif char.strip() == "̜" and phones_vector[-1][get_feature_to_index_lookup()["unrounded"]] != 1:
                 # unrounded
                 phones_vector[-1][get_feature_to_index_lookup()["unrounded"]] = 2
-            elif char == "̥" and phones_vector[-1][get_feature_to_index_lookup()["unvoiced"]] != 1:
+            elif char.strip() == "̥" and phones_vector[-1][get_feature_to_index_lookup()["unvoiced"]] != 1:
                 # voiceless
                 phones_vector[-1][get_feature_to_index_lookup()["unvoiced"]] = 2
-            elif char == "˥":
+            elif char.strip() == "˥":
                 # very high tone
                 phones_vector[-1][get_feature_to_index_lookup()["very-high-tone"]] = 1
-            elif char == "˦":
+            elif char.strip() == "˦":
                 # high tone
                 phones_vector[-1][get_feature_to_index_lookup()["high-tone"]] = 1
-            elif char == "˧":
+            elif char.strip() == "˧":
                 # mid tone
                 phones_vector[-1][get_feature_to_index_lookup()["mid-tone"]] = 1
-            elif char == "˨":
+            elif char.strip() == "˨":
                 # low tone
                 phones_vector[-1][get_feature_to_index_lookup()["low-tone"]] = 1
-            elif char == "˩":
+            elif char.strip() == "˩":
                 # very low tone
                 phones_vector[-1][get_feature_to_index_lookup()["very-low-tone"]] = 1
-            elif char == "⭧":
+            elif char.strip() == "⭧":
                 # rising tone
                 phones_vector[-1][get_feature_to_index_lookup()["rising-tone"]] = 1
-            elif char == "⭨":
+            elif char.strip() == "⭨":
                 # falling tone
                 phones_vector[-1][get_feature_to_index_lookup()["falling-tone"]] = 1
-            elif char == "⮁":
+            elif char.strip() == "⮁":
                 # peaking tone
                 phones_vector[-1][get_feature_to_index_lookup()["peaking-tone"]] = 1
-            elif char == "⮃":
+            elif char.strip() == "⮃":
                 # dipping tone
                 phones_vector[-1][get_feature_to_index_lookup()["dipping-tone"]] = 1
             else:
@@ -762,7 +764,12 @@ class ArticulatoryCombinedTextFrontend:
                         print("unknown phoneme: {}".format(char))
                 else:
                     phones_vector.append(self.phone_to_vector[char].copy())  # leave error handling to elsewhere
-
+                # the following lines try to emulate whispering by removing all voiced features
+                # phones_vector[-1][get_feature_to_index_lookup()["voiced"]] = 0
+                # phones_vector[-1][get_feature_to_index_lookup()["unvoiced"]] = 1
+                # the following lines explore what would happen, if the system is told to produce sounds a human cannot
+                # for dim, _ in enumerate(phones_vector[-1]):
+                #     phones_vector[-1][dim] = 1
                 if stressed_flag:
                     stressed_flag = False
                     phones_vector[-1][get_feature_to_index_lookup()["stressed"]] = 1
@@ -772,7 +779,6 @@ class ArticulatoryCombinedTextFrontend:
     def get_phone_string(self, text, include_eos_symbol=True, for_feature_extraction=False, for_plot_labels=False):
         if text == "":
             return ""
-        text = ". " + text  # the addition of ". " is a dirty hack, but it makes it sound better.
         # expand abbreviations
         utt = self.expand_abbreviations(text)
 
@@ -851,6 +857,13 @@ class ArticulatoryCombinedTextFrontend:
             phones = phones.replace('5', "˧˩˧")
             phones = phones.replace('6', "˧˩˨ʔ")  # very weird tone, because the tone introduces another phoneme
             phones = phones.replace('7', "˧")
+        elif self.g2p_lang == "yue":
+            phones = phones.replace('1', "˥")
+            phones = phones.replace('2', "˧˥")
+            phones = phones.replace('3', "˧")
+            phones = phones.replace('4', "˧˩")
+            phones = phones.replace('5', "˩˧")
+            phones = phones.replace('6', "˨")
         # more of this handling for more tonal languages can be added here, simply make an elif statement and check for the language.
         return self.postprocess_phoneme_string(phones, for_feature_extraction, include_eos_symbol, for_plot_labels)
 
@@ -954,6 +967,22 @@ class ArticulatoryCombinedTextFrontend:
                 ('⮃', ""),  # dipping
                 ('⮁', ""),  # peaking
                 ('̃', ""),  # nasalizing
+                ("̧", ""),  # palatalized
+                ("ʷ", ""),  # labialized
+                ("ʰ", ""),  # aspirated
+                ("ˠ", ""),  # velarized
+                ("ˁ", ""),  # pharyngealized
+                ("ˀ", ""),  # glottalized
+                ("ʼ", ""),  # ejective
+                ("̹", ""),  # rounding
+                ("̞", ""),  # open
+                ("̪", ""),  # dental
+                ("̬", ""),  # voiced
+                ("̝", ""),  # closed
+                ("̰", ""),  # laryngalization
+                ("̈", ""),  # centralization
+                ("̜", ""),  # unrounded
+                ("̥", ""),  # voiceless
             ]
         for replacement in replacements:
             phoneme_string = phoneme_string.replace(replacement[0], replacement[1])
@@ -1049,7 +1078,7 @@ def get_language_id(language):
         except FileNotFoundError:
             iso_codes_to_ids = load_json_from_path("iso_lookup.json")[-1]
     if language not in iso_codes_to_ids:
-        print("Please specify the language as ISO 639-2 code (https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes)")
+        print("Please specify the language as ISO 639-3 code (https://en.wikipedia.org/wiki/List_of_ISO_639-3_codes)")
         return None
     return torch.LongTensor([iso_codes_to_ids[language]])
 

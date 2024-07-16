@@ -9,7 +9,6 @@ import soundfile as sf
 import torch
 import torchaudio
 from torch.utils.data import Dataset
-from torchvision.transforms.v2 import GaussianBlur
 from tqdm import tqdm
 
 from Preprocessing.AudioPreprocessor import AudioPreprocessor
@@ -57,9 +56,7 @@ class HiFiGANDataset(Dataset):
                 process_list[-1].start()
             for process in process_list:
                 process.join()
-        self.blurrer = GaussianBlur(kernel_size=(5, 5), sigma=(0.5, 2.0))  # simulating the smoothness of a generated spectrogram
         # self.masker = torchaudio.transforms.FrequencyMasking(freq_mask_param=16, iid_masks=True)  # up to 16 consecutive bands can be masked, each element in the batch gets a different mask. Taken out because it seems too extreme.
-        self.spec_augs = [self.blurrer, lambda x: x, lambda x: x, lambda x: x, lambda x: x]
         self.wave_augs = [random_pitch_shifter, polarity_inverter, lambda x: x, lambda x: x, lambda x: x, lambda x: x]  # just some data augmentation
         self.wave_distortions = [CodecSimulator(), lambda x: x, lambda x: x, lambda x: x, lambda x: x]  # simulating the fact, that we train the TTS on codec-compressed waves
         print("{} eligible audios found".format(len(self.waves)))
@@ -108,9 +105,6 @@ class HiFiGANDataset(Dataset):
             melspec = self.melspec_ap.audio_to_mel_spec_tensor(resampled_segment,
                                                                explicit_sampling_rate=16000,
                                                                normalize=False).transpose(0, 1)[:-1].transpose(0, 1)
-            if self.use_random_corruption:
-                # augmentations for the spec
-                melspec = random.choice(self.spec_augs)(melspec.unsqueeze(0)).squeeze(0)
             return segment.detach(), melspec.detach()
         except RuntimeError:
             print("encountered a runtime error, using fallback strategy")
@@ -148,7 +142,6 @@ if __name__ == '__main__':
                                                normalize=False).transpose(0, 1)[:-1].transpose(0, 1)
 
     cs = CodecSimulator()
-    blurrer = GaussianBlur(kernel_size=(5, 5), sigma=(0.5, 2.0))
     masker = torchaudio.transforms.FrequencyMasking(freq_mask_param=16, iid_masks=True)  # up to 8 consecutive bands can be masked
 
     # testing codec simulator
@@ -157,12 +150,6 @@ if __name__ == '__main__':
     plt.plot(resampled_wave, alpha=0.5)
     plt.plot(out, alpha=0.5)
     plt.title("Codec Simulator")
-    plt.show()
-
-    # testing Gaussian blur
-    blurred_spec = blurrer(spec.unsqueeze(0)).squeeze(0)
-    plt.imshow(blurred_spec.cpu().numpy(), origin="lower", cmap='GnBu')
-    plt.title("Blurred Spec")
     plt.show()
 
     # testing spectrogram masking

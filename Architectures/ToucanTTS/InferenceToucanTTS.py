@@ -8,6 +8,7 @@ from torch.nn import Tanh
 from Architectures.GeneralLayers.ConditionalLayerNorm import AdaIN1d
 from Architectures.GeneralLayers.ConditionalLayerNorm import ConditionalLayerNorm
 from Architectures.GeneralLayers.Conformer import Conformer
+from Architectures.GeneralLayers.LayerNorm import LayerNorm
 from Architectures.GeneralLayers.LengthRegulator import LengthRegulator
 from Architectures.ToucanTTS.flow_matching import CFMDecoder
 from Preprocessing.articulatory_features import get_feature_to_index_lookup
@@ -108,12 +109,14 @@ class ToucanTTS(torch.nn.Module):
                                  embedding_integration=embedding_integration)
 
         if self.integrate_language_embedding_into_encoder_out:
+            self.language_embedding_projection = torch.nn.Linear(lang_emb_size, attention_dimension)
+            self.language_emb_norm = LayerNorm(attention_dimension)
             if embedding_integration == "AdaIN":
-                self.language_embedding_infusion = AdaIN1d(style_dim=lang_emb_size, num_features=attention_dimension)
+                self.language_embedding_infusion = AdaIN1d(style_dim=attention_dimension, num_features=attention_dimension)
             elif embedding_integration == "ConditionalLayerNorm":
-                self.language_embedding_infusion = ConditionalLayerNorm(speaker_embedding_dim=lang_emb_size, hidden_dim=attention_dimension)
+                self.language_embedding_infusion = ConditionalLayerNorm(speaker_embedding_dim=attention_dimension, hidden_dim=attention_dimension)
             else:
-                self.language_embedding_infusion = torch.nn.Linear(attention_dimension + lang_emb_size, attention_dimension)
+                self.language_embedding_infusion = torch.nn.Linear(attention_dimension + attention_dimension, attention_dimension)
 
         if self.prosody_order != "all":
             self.duration_predictor = CFMDecoder(hidden_channels=prosody_channels,
@@ -222,20 +225,22 @@ class ToucanTTS(torch.nn.Module):
         text_tensors = torch.clamp(text_tensors, max=1.0)
         # this is necessary, because of the way we represent modifiers to keep them identifiable.
 
+        utterance_embedding = torch.nn.functional.normalize(utterance_embedding)
+
         if not self.multilingual_model:
             lang_ids = None
 
         if not self.multispeaker_model:
             utterance_embedding = None
-        else:
-            utterance_embedding = torch.nn.functional.normalize(utterance_embedding)
 
         # encoding the texts
         text_masks = make_non_pad_mask(text_lengths, device=text_lengths.device).unsqueeze(-2)
         encoded_texts, _ = self.encoder(text_tensors, text_masks, utterance_embedding=utterance_embedding, lang_ids=lang_ids)
 
         if self.integrate_language_embedding_into_encoder_out:
-            lang_embs = self.encoder.language_embedding(lang_ids).squeeze(-1).detach()
+            lang_embs = self.encoder.language_embedding(lang_ids)
+            lang_embs = self.language_embedding_projection(lang_embs)
+            lang_embs = self.language_emb_norm(lang_embs)
             encoded_texts = integrate_with_utt_embed(hs=encoded_texts, utt_embeddings=lang_embs, projection=self.language_embedding_infusion, embedding_training=self.use_conditional_layernorm_embedding_integration)
 
         # predicting pitch, energy and durations 
@@ -335,7 +340,7 @@ class ToucanTTS(torch.nn.Module):
 
         refined_codec_frames = self.flow_matching_decoder(mu=self.cfm_projection(decoded_speech).transpose(1, 2),
                                                           mask=make_non_pad_mask([len(decoded_speech[0])], device=decoded_speech.device).unsqueeze(-2),
-                                                          n_timesteps=30,
+                                                          n_timesteps=25,
                                                           temperature=0.05,  # low temperature, so the model follows the specified prosody curves better.
                                                           c=utterance_embedding).transpose(1, 2)
 

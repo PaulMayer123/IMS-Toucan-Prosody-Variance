@@ -22,10 +22,8 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume, use_wandb, wandb
     if model_dir is not None:
         save_dir = model_dir
     else:
-        save_dir = os.path.join(MODELS_DIR, "ToucanTTS_MLS_English_small")
+        save_dir = os.path.join(MODELS_DIR, "ToucanTTS_English")
     os.makedirs(save_dir, exist_ok=True)
-
-    datasets = list()
 
     if gpu_count > 1:
         rank = int(os.environ["LOCAL_RANK"])
@@ -34,20 +32,13 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume, use_wandb, wandb
     else:
         rank = 0
 
+    datasets = list()
+
     datasets.append(prepare_tts_corpus(transcript_dict=build_path_to_transcript_dict_libritts_all_clean,
                                        corpus_dir=os.path.join(PREPROCESSING_DIR, "libri_all_clean"),
                                        lang="eng",
                                        gpu_count=gpu_count,
                                        rank=rank))
-
-    chunk_count = 50
-    chunks = split_dictionary_into_chunks(build_path_to_transcript_dict_mls_english(), split_n=chunk_count)
-    for index in range(chunk_count):
-        datasets.append(prepare_tts_corpus(transcript_dict=chunks[index],
-                                           corpus_dir=os.path.join(PREPROCESSING_DIR, f"mls_english_chunk_{index}"),
-                                           lang="eng",
-                                           gpu_count=gpu_count,
-                                           rank=rank))
 
     train_set = ConcatDataset(datasets)
 
@@ -74,14 +65,15 @@ def run(gpu_id, resume_checkpoint, finetune, model_dir, resume, use_wandb, wandb
     train_loop(net=model,
                datasets=[train_set],
                device=device,
+               batch_size=16,
+               steps_per_checkpoint=1000,
                save_directory=save_dir,
                eval_lang="eng",
                path_to_checkpoint=resume_checkpoint,
                fine_tune=finetune,
                resume=resume,
                use_wandb=use_wandb,
-               gpu_count=gpu_count,
                train_samplers=[train_sampler],
-               steps_per_checkpoint=2000)
+               gpu_count=gpu_count)
     if use_wandb:
         wandb.finish()

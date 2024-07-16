@@ -87,6 +87,7 @@ class CodecAlignerDataset(Dataset):
         if type(path_to_transcript_dict) != dict:
             path_to_transcript_dict = path_to_transcript_dict()  # in this case we passed a function instead of the dict, so that the function isn't executed if not necessary.
         torch.multiprocessing.set_start_method('spawn', force=True)
+        torch.multiprocessing.set_sharing_strategy('file_system')
         resource_manager = Manager()
         self.path_to_transcript_dict = resource_manager.dict(path_to_transcript_dict)
         key_list = list(self.path_to_transcript_dict.keys())
@@ -95,6 +96,13 @@ class CodecAlignerDataset(Dataset):
         fisher_yates_shuffle(key_list)
         # build cache
         print("... building dataset cache ...")
+        torch.hub._validate_not_a_forked_repo = lambda a, b, c: True  # torch 1.9 has a bug in the hub loading, this is a workaround
+        # careful: assumes 16kHz or 8kHz audio
+        _, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad',  # make sure it gets downloaded during single-processing first, if it's not already downloaded
+                              model='silero_vad',
+                              force_reload=False,
+                              onnx=False,
+                              verbose=False)
         self.result_pool = resource_manager.list()
         # make processes
         key_splits = list()
@@ -194,16 +202,19 @@ class CodecAlignerDataset(Dataset):
                 print(f"Problem with an audio file: {path}")
                 continue
 
+            if len(wave.shape) > 1:  # oh no, we found a stereo audio!
+                if len(wave[0]) == 2:  # let's figure out whether we need to switch the axes
+                    wave = wave.transpose()  # if yes, we switch the axes.
             wave = librosa.to_mono(wave)
 
             if sr != assumed_sr:
                 assumed_sr = sr
                 ap = CodecAudioPreprocessor(input_sr=assumed_sr, device=device)
-                resample = Resample(orig_freq=assumed_sr, new_freq=16000)
+                resample = Resample(orig_freq=assumed_sr, new_freq=16000).to(device)
                 print(f"{path} has a different sampling rate --> adapting the codec processor")
 
             try:
-                norm_wave = resample(torch.tensor(wave, device=device).float())
+                norm_wave = resample(torch.tensor(wave).float().to(device))
             except ValueError:
                 continue
             dur_in_seconds = len(norm_wave) / 16000
