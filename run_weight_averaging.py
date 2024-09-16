@@ -7,13 +7,17 @@ import os
 import torch
 
 from Architectures.ToucanTTS.InferenceToucanTTS import ToucanTTS
+from Architectures.ToucanTTS.InferenceToucanTTS_nf import ToucanTTS_nf
 from Architectures.Vocoder.HiFiGAN_Generator import HiFiGAN
 from Utility.storage_config import MODELS_DIR
 
 
-def load_net_toucan(path):
+def load_net_toucan(path, architecture="CFM"):
     check_dict = torch.load(path, map_location=torch.device("cpu"))
-    net = ToucanTTS(weights=check_dict["model"], config=check_dict["config"])
+    if architecture == "CFM":
+        net = ToucanTTS(weights=check_dict["model"], config=check_dict["config"])
+    elif architecture == "NF":
+        net = ToucanTTS_nf(weights=check_dict["model"], config=check_dict["config"])
     return net, check_dict["default_emb"]
 
 
@@ -40,7 +44,7 @@ def get_n_recent_checkpoints_paths(checkpoint_dir, n=5):
     return [os.path.join(checkpoint_dir, "checkpoint_{}.pt".format(step)) for step in checkpoint_list[:n]]
 
 
-def average_checkpoints(list_of_checkpoint_paths, load_func):
+def average_checkpoints(list_of_checkpoint_paths, load_func, architecture="CFM"):
     # COLLECT CHECKPOINTS
     if list_of_checkpoint_paths is None or len(list_of_checkpoint_paths) == 0:
         return None
@@ -51,7 +55,7 @@ def average_checkpoints(list_of_checkpoint_paths, load_func):
     # LOAD CHECKPOINTS
     for path_to_checkpoint in list_of_checkpoint_paths:
         print("loading model {}".format(path_to_checkpoint))
-        model, default_embed = load_func(path=path_to_checkpoint)
+        model, default_embed = load_func(path=path_to_checkpoint, architecture=architecture)
         checkpoints_weights[path_to_checkpoint] = dict(model.named_parameters())
 
     # AVERAGE CHECKPOINTS

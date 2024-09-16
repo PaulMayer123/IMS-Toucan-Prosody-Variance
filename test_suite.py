@@ -11,8 +11,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import Ellipse
 import matplotlib.cm as cm
 from wvmos import get_wvmos
-from scipy.stats import gaussian_kde, ks_2samp, mannwhitneyu
-
+from scipy.stats import gaussian_kde
+import json
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataloader import DataLoader
 from scipy.stats import ttest_ind, f_oneway
@@ -26,24 +26,25 @@ from Utility.storage_config import PREPROCESSING_DIR
 from InferenceInterfaces.ToucanTTSInterface import ToucanTTSInterface
 
 
-def read_texts_to_file(model_id, sentence, filename, device="cpu", language="eng", speaker_reference=None, duration_scaling_factor=1.0):
-    tts = ToucanTTSInterface(device=device, tts_model_path=model_id)
+def read_texts_to_file(model_id, sentence, filename, device="cpu", language="eng", speaker_reference=None, duration_scaling_factor=1.0, prosody_creativity=0.4, architecture ="CFM"):
+    
+    tts = ToucanTTSInterface(device=device, tts_model_path=model_id, architecture=architecture)
     tts.set_language(language)
     if speaker_reference is not None:
         tts.set_utterance_embedding(speaker_reference)
     if type(sentence) == str:
         sentence = [sentence]
-    tts.read_to_file(text_list=sentence, file_location=filename, duration_scaling_factor=duration_scaling_factor)
+    tts.read_to_file(text_list=sentence, file_location=filename, duration_scaling_factor=duration_scaling_factor, prosody_creativity=prosody_creativity)
     del tts
 
 
-def read_text(model_id, sentence, device="cpu", language="eng", speaker_reference=None, duration_scaling_factor=1.0):
-    tts = ToucanTTSInterface(device=device, tts_model_path=model_id)
+def read_text(model_id, sentence, device="cpu", language="eng", speaker_reference=None, duration_scaling_factor=1.0, prosody_creativity=0.4, architecture="CFM"):
+    tts = ToucanTTSInterface(device=device, tts_model_path=model_id, architecture=architecture)
     tts.set_language(language)
     if speaker_reference is not None:
         tts.set_utterance_embedding(speaker_reference)
     
-    phone, durations, pitch, energy = tts.get_prosody_values(text=sentence, duration_scaling_factor=duration_scaling_factor)
+    phone, durations, pitch, energy = tts.get_prosody_values(text=sentence, duration_scaling_factor=duration_scaling_factor, prosody_creativity=prosody_creativity)
     
     return phone, durations, pitch, energy
 
@@ -125,19 +126,23 @@ def plot_freq(version, path_to_data="samples/test_freq_pitch.csv"):
         version = version.replace("/", "_")
         model = model.replace("/", "_")
         plt.savefig(f"visualizations/{version}_{model}_freq.png")
+        plt.close()
 
 
 
-def variance_test(version, model_id="Meta", exec_device="cpu", samples = 40, speaker_reference=None):
-    os.makedirs(f"audios/eval2/{version}", exist_ok=True)
+def variance_test(version, dir , model_id="Meta", exec_device="cpu", samples = 40, speaker_reference=None, prosody_creativity=0.4, architecture="CFM"):
+    os.makedirs(f"audios/{dir}/{version}", exist_ok=True)
     print("speaker ", speaker_reference)
     for i in tqdm(range(samples)):
         read_texts_to_file(model_id=model_id,
                 sentence=["It snowed, rained, and hailed the same morning."],
-                filename=f"audios/eval2/{version}/{version}-{i}.wav",
+                filename=f"audios/{dir}/{version}/{version}-{i}.wav",
                 device=exec_device,
                 language="eng",
-                speaker_reference=speaker_reference)
+                speaker_reference=speaker_reference,
+                prosody_creativity=prosody_creativity,
+                architecture=architecture,
+                duration_scaling_factor=3)
 
 
 
@@ -333,14 +338,15 @@ def plot_boxplot_per_sentence(version, path_to_data="samples/CFM_testdata_sample
     #plt.savefig(f"visualizations/{version}testing.png")
 
 
-def get_mean_var(path_to_data):
-     
+def get_mean_var(path_to_data, per_sample=False): 
     df = pd.read_csv(path_to_data)
     print(df.head())
     print("")
     
-    grouped = df.groupby(['model'])
+    if per_sample:
+        return df["pitch_mean"], df["pitch_var"], df["energy_mean"], df["energy_var"], df["duration_mean"], df["duration_var"]
     
+    grouped = df.groupby(['model'])
     # Calculate statistics
     statistics = grouped.agg(
         pitch_mean=('pitch_var', 'mean'),
@@ -477,6 +483,8 @@ def collate_and_pad(batch):
 def calculate_overlap_area(data1, data2):
     if data1.nunique() == 1: # all speaker values the same
         return 0.0
+    elif data2.nunique() == 1: # all speaker values the same
+        return 0.0
     # KDE estimation for each dataset
     kde1 = gaussian_kde(data1)
     kde2 = gaussian_kde(data2)
@@ -495,6 +503,8 @@ def calculate_overlap_area(data1, data2):
 # Function to calculate Bhattacharyya distance manually
 def calculate_bhattacharyya_distance(data1, data2):
     if data1.nunique() == 1: # all speaker values the same
+        return 0.0
+    elif data2.nunique() == 1: # all speaker values the same
         return 0.0
     kde1 = gaussian_kde(data1)
     kde2 = gaussian_kde(data2)
@@ -521,12 +531,24 @@ def create_speaker_values(device):
     'sentence': [],
     'step': []
     }
+    data_speaker_sentence = {
+    'model': [],
+    'pitch_mean': [],
+    'pitch_var': [],
+    'energy_mean': [],
+    'energy_var': [],
+    'duration_mean': [],
+    'sentence': [],
+    'duration_var': []
+    }
     speaker_data = prepare_tts_corpus(transcript_dict=build_path_to_transcript_dict_RAVDESS_one_speaker(),
                                         corpus_dir=os.path.join(PREPROCESSING_DIR, "RAVDESS_one_speaker"),
                                         lang="eng", fine_tune_aligner=True)
     train_loader = DataLoader(dataset=speaker_data,
                             collate_fn=collate_and_pad,
                             batch_size=1)
+    
+    print(len(train_loader))
 
     for i, batch in enumerate(tqdm(train_loader)):
         text_tensors = batch[0].to(device)
@@ -545,6 +567,22 @@ def create_speaker_values(device):
         pitch_unbound = torch.unbind(gold_pitch, dim=1)
         energy_unbound = torch.unbind(gold_energy, dim=1)
         duration_unbound = torch.unbind(gold_durations, dim=1)
+        
+        
+        result = 0.0
+        for value in energy_unbound:
+            result += value.item()
+        
+        mean = result / len(energy_unbound)
+
+        data_speaker_sentence['model'].append("speaker")
+        data_speaker_sentence['pitch_mean'].append(torch.stack(pitch_unbound).mean().item())
+        data_speaker_sentence['pitch_var'].append(torch.stack(pitch_unbound).var().item())
+        data_speaker_sentence['energy_mean'].append(mean)
+        data_speaker_sentence['energy_var'].append(torch.stack(energy_unbound).var().item())
+        data_speaker_sentence['duration_mean'].append(torch.stack(duration_unbound).float().mean().item())
+        data_speaker_sentence['duration_var'].append(torch.stack(duration_unbound).float().var().item())
+        data_speaker_sentence['sentence'].append(sentence)  
 
         for idx, (p, e, d) in enumerate(zip(pitch_unbound, energy_unbound, duration_unbound)):
             data_speaker['model'].append("speaker")
@@ -553,11 +591,14 @@ def create_speaker_values(device):
             data_speaker['duration'].append(np.float32(d.cpu().item()))   
             data_speaker['sentence'].append(sentence)  
             data_speaker['step'].append(idx)
+    
+    df_speaker_sentence = pd.DataFrame(data_speaker_sentence)
     df_speaker = pd.DataFrame(data_speaker)
+    df_speaker_sentence.to_csv("samples/speaker_sentence.csv", index=False)
     df_speaker.to_csv("samples/speaker.csv", index=False)
 
 
-def create_model_samples(version, model_id, device, reference_speaker, samples=100):
+def create_model_samples(version, model_id, device, reference_speaker, samples=100, prosody_creativity=0.4, architecture="CFM"):
     data_model = {
     'model': [],
     'pitch': [],
@@ -573,7 +614,9 @@ def create_model_samples(version, model_id, device, reference_speaker, samples=1
     'energy_mean': [],
     'energy_var': [],
     'duration_mean': [],
-    'duration_var': []
+    'duration_var': [],
+    'sentence': []
+    
     }
     # Sentence for speaker ref "sentences_24_regular"        : "You can well enjoy the evening now. We'll make up for it now. The weakness of a murderer. But they wouldn't leave me alone. The telegram was from his wife."
     transcript_for_ears = [
@@ -587,16 +630,27 @@ def create_model_samples(version, model_id, device, reference_speaker, samples=1
                         sentence=sentence,
                         device=device,
                         language="eng",
-                        speaker_reference=reference_speaker)
+                        speaker_reference=reference_speaker,
+                        prosody_creativity=prosody_creativity,
+                        architecture=architecture)
             
             data_model_sentence['model'].append(model_id)
+            data_model_sentence['pitch_mean'].append(pitches.mean().item())
+            data_model_sentence['pitch_var'].append(pitches.var().item())
+            data_model_sentence['energy_mean'].append(energies.mean().item())
+            data_model_sentence['energy_var'].append(energies.var().item())
+            data_model_sentence['duration_mean'].append(durations.float().mean().item())
+            data_model_sentence['duration_var'].append(durations.float().var().item())
+            data_model_sentence['sentence'].append(sentence)
+            """
             data_model_sentence['pitch_mean'].append(pitches.cpu().numpy().mean())
             data_model_sentence['pitch_var'].append(pitches.cpu().numpy().var())
             data_model_sentence['energy_mean'].append(energies.cpu().numpy().mean())
             data_model_sentence['energy_var'].append(energies.cpu().numpy().var())
             data_model_sentence['duration_mean'].append(durations.cpu().numpy().mean())
             data_model_sentence['duration_var'].append(durations.cpu().numpy().var())
-    
+            """
+
             for idx, (ph, p, e, d) in enumerate(zip(phones, pitches, energies, durations)):
                     data_model['model'].append(model_id.rsplit('/', 1)[-1])
                     data_model['pitch'].append(np.float32(p.cpu()))
@@ -612,21 +666,27 @@ def create_model_samples(version, model_id, device, reference_speaker, samples=1
     df_model = pd.DataFrame(data_model)
     df_model.to_csv(f"samples/{version}_data_samples_sentence_phones.csv", index=False)
 
-def compare_to_reference(version, reference_speaker, model_id, samples=100, device="cpu", use_wandb = True):
+def compare_to_reference(version, reference_speaker, model_id, samples=100, device="cpu", use_wandb = True, prosody_creativity=0.4, number=0, architecture="CFM"):
     
-    print(f"GPU {os.environ['CUDA_VISIBLE_DEVICES']} is the only visible device(s).")
+    #print(f"GPU {os.environ['CUDA_VISIBLE_DEVICES']} is the only visible device(s).")
     
-    if not os.path.exists("samples/speaker.csv"):
+    if not os.path.exists("samples/speaker.csv") or not os.path.exists("samples/speaker_sentence.csv"):
         create_speaker_values(device)
     
     df_speaker = pd.read_csv("samples/speaker.csv")
+    df_speaker_sentence = pd.read_csv("samples/speaker_sentence.csv")
     
-    if not os.path.exists(f"samples/{version}_data_samples_sentence.csv"):
-        create_model_samples(version, model_id, device, reference_speaker, samples)
+    if not os.path.exists(f"samples/{version}_data_samples_sentence_phones.csv") or not os.path.exists(f"samples/{version}_data_samples_sentence.csv"):
+        create_model_samples(version, model_id, device, reference_speaker, samples, prosody_creativity, architecture=architecture)
     
     df_model = pd.read_csv(f"samples/{version}_data_samples_sentence_phones.csv")
+    df_model_sentence = pd.read_csv(f"samples/{version}_data_samples_sentence.csv")
 
     df = pd.concat([df_speaker, df_model], ignore_index=True)
+
+    df_sentence = pd.concat([df_speaker_sentence, df_model_sentence], ignore_index=True)
+
+
     
     overlap_pitch = []
     overlap_energy = []
@@ -636,59 +696,83 @@ def compare_to_reference(version, reference_speaker, model_id, samples=100, devi
     distance_energy = []
     distance_duration = []
 
+    
+    name = model_id.split("/")[-2] + str(prosody_creativity )             
+    # visualization
+    fig, axes = plt.subplots(3, 4, figsize=(30, 40))
+    # Add titles for the left and right halves
+    fig.suptitle(name, fontsize=86, y=0.96)
+    
+
+    for idx, sentence in enumerate(df_sentence['sentence'].unique()):
+        df_current_sentence = df_sentence[df_sentence['sentence'] == sentence].copy()
+
+        if idx == 0:
+            # Add a title for the left half
+            fig.text(0.25, 0.91, sentence, ha='center', fontsize=20)
+        else:
+            # Add a title for the right half
+            fig.text(0.75, 0.91, sentence, ha='center', fontsize=20)
+        
+        # Plot for Pitch
+        sns.violinplot(hue='model', y='pitch_mean', split=True, data=df_current_sentence, ax=axes[0, idx*2])
+        axes[0, idx*2].set_title(f'Mean Pitch')
+        
+        # Plot for Energy
+        
+        #pd.set_option('display.max_rows', None)
+        #print(df_sentence[['energy_mean', 'pitch_mean']])
+        sns.violinplot(hue='model', y='energy_mean', split=True, data=df_current_sentence, ax=axes[1, 2*idx])
+        axes[1, 2*idx].set_title(f'Mean Energy')
+        
+        # Plot for Duration
+        sns.violinplot(hue='model', y='duration_mean', split=True, data=df_current_sentence, ax=axes[2, 2*idx])
+        axes[2, 2*idx].set_title(f'Mean Duration')
+
+        # Plot for Pitch
+        sns.violinplot(hue='model', y='pitch_var', split=True, data=df_current_sentence, ax=axes[0, (1 + 2*idx)])
+        axes[0, (1 + 2*idx)].set_title(f'Variance Pitch')
+        
+        # Plot for Energy
+        sns.violinplot(hue='model', y='energy_var', split=True, data=df_current_sentence, ax=axes[1, (1 + 2*idx)])
+        axes[1, (1 + 2*idx)].set_title(f'Variance Energy')
+
+        # Plot for Duration
+        sns.violinplot(hue='model', y='duration_var', split=True, data=df_current_sentence, ax=axes[2, (1 + 2*idx)])
+        axes[2, (1 + 2*idx)].set_title(f'Variance Duration')
+        
+    # Adjust layout and display the plot
+    #plt.tight_layout()
+
+    plt.savefig(f"visualizations/{version}_speaker_violin.png")
+   
+    if use_wandb:
+        violin_plot = wandb.Image(f"visualizations/{version}_speaker_violin.png")
+        wandb.log({f"speaker_violin": violin_plot}, step = number)
+    plt.clf()
+    plt.close()
+
     for sentence in df['sentence'].unique():
         df_sentence = df[df['sentence'] == sentence]
         for step in df['step'].unique():
             
-            df_step = df_sentence[df_sentence['step'] == step]
+            df_step = df_sentence[df_sentence['step'] == step].copy()
             # Melt the DataFrame
             df_step.drop(columns=['sentence', 'step'], inplace=True)
             
-            df_speaker = df_step[df_step['model'] == 'speaker']
-            df_model =df_step[df_step['model'] != 'speaker']
+            df_speaker = df_step[df_step['model'] == 'speaker'].copy()
+            df_model =df_step[df_step['model'] != 'speaker'].copy()
 
-            print("Done sampling, computing overlap...")
             # Calculate overlap area for each variable
             overlap_pitch.append(calculate_overlap_area(df_speaker['pitch'], df_model['pitch']))
             overlap_energy.append(calculate_overlap_area(df_speaker['energy'], df_model['energy']))
             overlap_duration.append(calculate_overlap_area(df_speaker['duration'], df_model['duration']))
-
-            print("Done computing overlap, computing distances...")
 
             # Calculate Bhattacharyya distance for each variable
             distance_pitch.append(calculate_bhattacharyya_distance(df_speaker['pitch'], df_model['pitch']))
             distance_energy.append(calculate_bhattacharyya_distance(df_speaker['energy'], df_model['energy']))
             distance_duration.append(calculate_bhattacharyya_distance(df_speaker['duration'], df_model['duration']))
 
-            
-            fig, axes = plt.subplots(3, 1, figsize=(10, 15))
-
-            
-            # Plot for Pitch
-            sns.violinplot(hue='model', y='pitch', split=True, data=df_step, ax=axes[0])
-            axes[0].set_title(f'Pitch {step}')
-            
-            # Plot for Energy
-            sns.violinplot(hue='model', y='energy', split=True, data=df_step, ax=axes[1])
-            axes[1].set_title(f'Energy  {step}')
-
-            # Plot for Duration
-            sns.violinplot(hue='model', y='duration', split=True, data=df_step, ax=axes[2])
-            axes[2].set_title(f'Duration {step}')
-
-            
-            # Adjust layout and display the plot
-            plt.tight_layout()
-
-            
-            os.makedirs(f"visualizations/{sentence.replace('.', '')}", exist_ok=True)
-
-            plt.savefig(f"visualizations/{sentence.replace('.', '')}/{version}_{step}_speaker_violin.png")
-            
-            if use_wandb:
-                violin_plot = wandb.Image(f"visualizations/{sentence.replace('.', '')}/{version}_{step}_speaker_violin.png")
-                wandb.log({f"{version}_{sentence}_{step}_speaker_violin": violin_plot})
-            plt.clf()
             """
             # Create a boxplot for each variable grouped by model
             g = sns.catplot(
@@ -729,6 +813,7 @@ def compare_to_reference(version, reference_speaker, model_id, samples=100, devi
     distance_energy_mean = np.array(distance_energy).mean()
     distance_duration_mean = np.array(distance_duration).mean()
 
+    """
     print(f"Overlap Area (Pitch): {overlap_pitch_mean}")
     print(f"Overlap Area (Energy): {overlap_energy_mean}")
     print(f"Overlap Area (Duration): {overlap_duration_mean}")
@@ -736,7 +821,7 @@ def compare_to_reference(version, reference_speaker, model_id, samples=100, devi
     print(f"Bhattacharyya Distance (Pitch): {distance_pitch_mean}")
     print(f"Bhattacharyya Distance (Energy): {distance_energy_mean}")
     print(f"Bhattacharyya Distance (Duration): {distance_duration_mean}")
-
+    """
     overlap = (overlap_pitch_mean + overlap_energy_mean + overlap_duration_mean) / 3
     distance = (distance_pitch_mean + distance_energy_mean + distance_duration_mean) / 3
     return distance, overlap
@@ -859,6 +944,7 @@ def compare_gmms(path_to_data):
         plt.tight_layout()
         model = model.replace("/", "_")
         plt.savefig(f"visualizations/{model}_gmm.png")
+        plt.close()
 
     print(f"KL divergence D(P || Q) between GMMs P = {models[0]} and Q = {models[1]}: ")
     print(kl_divergence_gmm(gmms[0], gmms[1], num_samples=1000))
@@ -899,19 +985,92 @@ def compare_speaker_gmm(path_to_model_data, path_to_speaker_data):
 
 
 
-def get_automatic_mos_score(path_to_audios, device="cpu"):
+def get_automatic_mos_score(path_to_audios, device="cpu", per_sample=False):
     model = get_wvmos(device=device)
     
-    if path_to_audios[-4:] == '.wav':
-        # Check if input_data is a string
-        mos = model.calculate_one(path_to_audios[:-4])
+    if per_sample:
+        mos = []
+        print(os.listdir(path_to_audios))
+        for audio in os.listdir(path_to_audios):
+            print(audio)
+            mos.append(model.calculate_one(path_to_audios + "/" + audio))
     else:
-        mos = model.calculate_dir(path_to_audios, mean=True) # infer average MOS score across .wav files in directory
-    
+        if path_to_audios[-4:] == '.wav':
+            # Check if input_data is a string
+            mos = model.calculate_one(path_to_audios[:-4])
+        else:
+            mos = model.calculate_dir(path_to_audios, mean=True) # infer average MOS score across .wav files in directory
+        
     return mos
 
 
+def rename(path_to_folder):
 
+    for dir in os.listdir(path_to_folder):
+        correct_name = path_to_folder + "/" + dir
+        for file in os.listdir(correct_name):
+            new_path = correct_name + "/" + dir + "-" + file.split("-")[1] 
+            old_path = path_to_folder + "/" + dir + "/" + file
+            os.rename(old_path, new_path)
+
+
+def compare_predicted_self(version, wandb_id, per_sample=False, use_wandb=True):
+    run = wandb.init(id=wandb_id, project="IMS-Toucan-Prosody-Variance", entity="prosody-variance", resume='allow')
+    if not os.path.exists(f'samples/{wandb_id}/Evaluation_Table.table.json'):
+        
+        # Fetch the logged table
+        artifact = run.use_artifact(f'prosody-variance/IMS-Toucan-Prosody-Variance/run-{wandb_id}-Evaluation_Table:v1', type='run_table')
+        artifact.download(root=f"samples/{wandb_id}")
+        if not use_wandb:
+            run.finish()
+        
+    with open(f'samples/{wandb_id}/Evaluation_Table.table.json', 'r') as f:
+        table_data = json.load(f)
+
+    # Convert W&B Table to a pandas dataframe
+    columns = table_data['columns']
+    data = table_data['data']
+    df = pd.DataFrame(data=data, columns=columns)
+    print(df)
+    if per_sample:
+        value_vars = ['predicted', 'self_test']
+        df['model'] = df['model'].apply(lambda x: x.split("-")[0])
+    elif df['self_test_variance'][0] == -1:
+        value_vars = ['predicted', 'self_test']
+    else:
+        value_vars = ['predicted', 'self_test', 'predicted_var', 'self_test_variance']
+
+    df_melted = df.melt(id_vars=['model'], 
+                    value_vars=value_vars,
+                    var_name='variable', 
+                    value_name='value')
+    # Create a new 'source' column to distinguish between predicted and self_test
+    df_melted['variable'] = df_melted['variable'].apply(lambda x: 'predicted' if 'predicted' in x else 'self_test')
+    
+
+    df_test_data = df_melted[df_melted['model']]
+
+    plt.figure(figsize=(20, 6))
+    sns.barplot(x='model', y='value', hue='variable', data=df_melted, errorbar='sd')
+    # Adding labels and title
+    plt.xlabel('Models')
+    plt.ylabel('Score')
+    name = df['predictor'][0].split("/")[-1]
+    if per_sample:
+        loss = torch.nn.functional.mse_loss(torch.tensor(df['predicted']), torch.tensor(df['self_test']))
+    elif df['self_test_variance'][0] == -1:
+        loss = torch.nn.functional.mse_loss(torch.tensor(df['predicted']), torch.tensor(df['self_test']))
+    else:
+        loss = torch.nn.functional.mse_loss(torch.tensor(df[['predicted', 'predicted_var']].values), torch.tensor(df[['self_test', 'self_test_variance']].values))
+    plt.title(f"{name}; LOSS: {loss}")
+    plt.xticks(rotation=45,ha='right')
+
+    # Adjust the plot layout to prevent cutting off labels
+    plt.tight_layout(rect=[0, 0, 1, 1])
+    plt.savefig(f"visualizations/{version}_comparison_{name}_results.png")
+    if use_wandb:
+        bar_plot = wandb.Image(f"visualizations/{version}_comparison_{name}_results.png")
+        wandb.log({"Comparison barplot": bar_plot})
 
 if __name__ == '__main__':
     #exec_device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -920,18 +1079,20 @@ if __name__ == '__main__':
     # merged_speaker_references = ["audios/speaker_references/" + ref for ref in os.listdir("audios/speaker_references/")]
     
     """
-    create_prosody_samples_per_sentence(version="CFM_gmm",
-              model_ids=["Libri_Prosody/CFM/epd_log_v4", "Libri_Prosody/CFM/energy_pitch_duration"],
+    create_prosody_samples_per_sentence(version="NF_test",
+              model_ids=["NF/NF_epd_log_c8_l6_k5_d0.2"],
               gpu_id=2,
              speaker_reference="audios/speaker_reference/100_121669_000013_000000.wav",
              samples=10)
-    """
     
+    """
     #add_config_var("Models/ToucanTTS_Libri_Prosody/CFM/epd_log_v4/best.pt")
     #plot_boxplot_per_sentence("CFM_", path_to_data="samples/CFM__data_samples_sentence.csv")
     #create_freq_samples(version="CFM_log_freq", model_ids = ["Libri_Prosody/CFM/epd_log_v4"], gpu_id=0, speaker_reference="audios/speaker_reference/100_121669_000013_000000.wav", samples=10)
-    compare_to_reference("testing", reference_speaker="audios/speaker_reference/sentences_24_regular.wav", samples=3,model_id="Libri_Prosody/CFM/epd_log_v4")
+    #compare_to_reference("testing", reference_speaker="audios/speaker_reference/sentences_24_regular.wav", samples=3,model_id="Libri_Prosody/CFM/epd_log_v4")
     #plot_freq("CFM_log_freq", path_to_data="samples/CFM_log_freq_pitch.csv")
     #compare_gmms("samples/CFM_gmm_data_samples_sentence.csv")
     #self_test("audios")
     #print(get_automatic_mos_score("audios/", cuda=True))
+    #rename("audios/eval_combined")
+    compare_predicted_self("eval_combined_VAR", "3abeptps", per_sample=False)

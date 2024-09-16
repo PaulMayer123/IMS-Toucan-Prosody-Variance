@@ -88,11 +88,8 @@ def variance_test(version, model_id="Meta", exec_device="cpu", speaker_reference
     os.makedirs("audios", exist_ok=True)
 
     read_texts(model_id=model_id,
-               sentence=["It snowed, rained, and hailed the same morning.",
-                         "It snowed, rained, and hailed the same morning.",
-                         "It snowed, rained, and hailed the same morning.",
-                         "It snowed, rained, and hailed the same morning.",],
-               filename=f"audios/{version}_variance_test.wav",
+               sentence=["医師会がなくても、近隣の病院なら紹介してくれると思います。"],
+               filename=f"audios/{version}japan.wav",
                device=exec_device,
                language="eng",
                speaker_reference=speaker_reference)
@@ -116,7 +113,7 @@ if __name__ == '__main__':
               model_id="Libri_Prosody/CFM/pitch_energy_duration",
               exec_device=exec_device)
     """
-    variance_test(version="epd_log_no_drop",
-              model_id="Libri_Prosody/CFM/epd_log_no_drop",
+    variance_test(version="japan",
+              model_id="CFM/epd_new",
               exec_device=device,
               speaker_reference="audios/speaker_reference/100_121669_000013_000000.wav")

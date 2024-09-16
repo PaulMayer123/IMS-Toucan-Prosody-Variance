@@ -37,10 +37,12 @@ class LengthRegulator(torch.nn.Module, ABC):
     def forward(self, xs, ds, alpha=1.0):
         """
         Calculate forward propagation.
+
         Args:
             xs (Tensor): Batch of sequences of char or phoneme embeddings (B, Tmax, D).
             ds (LongTensor): Batch of durations of each frame (B, T).
             alpha (float, optional): Alpha value to control speed of speech.
+
         Returns:
             Tensor: replicated input tensor based on durations (B, T*, D).
         """
@@ -48,11 +50,9 @@ class LengthRegulator(torch.nn.Module, ABC):
         if alpha != 1.0:
             assert alpha > 0
             ds = torch.round(ds.float() * alpha).long()
-        ds[ds.sum(dim=1).eq(0), :2] = 1  # If sum is 0, set the first two values to 1
-    
-        # Ensure that if any sequence has a total duration sum of 1, adjust it
-        ds[ds.sum(dim=1).eq(1), :2] = 1 
 
+        if ds.sum() == 0:
+            ds[ds.sum(dim=1).eq(0)] = 1
 
         return pad_list([self._repeat_one_sequence(x, d) for x, d in zip(xs, ds)], self.pad_value)
 

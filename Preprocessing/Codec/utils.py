@@ -24,11 +24,12 @@ def seed_everything(seed, cudnn_deterministic=False):
         seed: the integer value seed for global random state
     """
     if seed is not None:
+        pass
         # print(f"Global seed set to {seed}")
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        #random.seed(seed)
+        #np.random.seed(seed)
+        #torch.manual_seed(seed)
+        #torch.cuda.manual_seed_all(seed)
 
     # if cudnn_deterministic:
     #     torch.backends.cudnn.deterministic = True

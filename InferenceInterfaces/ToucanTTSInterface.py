@@ -11,6 +11,7 @@ from speechbrain.pretrained import EncoderClassifier
 from torchaudio.transforms import Resample
 
 from Architectures.ToucanTTS.InferenceToucanTTS import ToucanTTS
+from Architectures.ToucanTTS.InferenceToucanTTS_nf import ToucanTTS_nf
 from Architectures.Vocoder.HiFiGAN_Generator import HiFiGAN
 from Preprocessing.AudioPreprocessor import AudioPreprocessor
 from Preprocessing.TextFrontend import ArticulatoryCombinedTextFrontend
@@ -27,6 +28,7 @@ class ToucanTTSInterface(torch.nn.Module):
                  tts_model_path=os.path.join(MODELS_DIR, f"ToucanTTS_Meta", "best.pt"),  # path to the ToucanTTS checkpoint or just a shorthand if run standalone
                  vocoder_model_path=os.path.join(MODELS_DIR, f"Vocoder", "best.pt"),  # path to the Vocoder checkpoint
                  language="eng",  # initial language of the model, can be changed later with the setter methods
+                 architecture = "CFM"
                  ):
         super().__init__()
         self.device = device
@@ -43,7 +45,10 @@ class ToucanTTSInterface(torch.nn.Module):
         #   load phone to features model    #
         #####################################
         checkpoint = torch.load(tts_model_path, map_location='cpu')
-        self.phone2mel = ToucanTTS(weights=checkpoint["model"], config=checkpoint["config"])
+        if architecture == "CFM":
+            self.phone2mel = ToucanTTS(weights=checkpoint["model"], config=checkpoint["config"])
+        elif architecture == "NF":
+            self.phone2mel = ToucanTTS_nf(weights=checkpoint["model"], config=checkpoint["config"])
         with torch.no_grad():
             self.phone2mel.store_inverse_all()  # this also removes weight norm
         self.phone2mel = self.phone2mel.to(torch.device(device))

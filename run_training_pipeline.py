@@ -99,11 +99,13 @@ if __name__ == '__main__':
         # example call for gpu_count training:
         # torchrun --standalone --nproc_per_node=4 --nnodes=1 run_training_pipeline.py nancy --gpu_id "1,2,3"
 
+    torch.use_deterministic_algorithms(False)
     torch.manual_seed(9665)
     random.seed(9665)
     torch.random.manual_seed(9665)
 
     torch.multiprocessing.set_sharing_strategy('file_system')
+
 
     pipeline_dict[args.pipeline](gpu_id=args.gpu_id,
                                  resume_checkpoint=args.resume_checkpoint,

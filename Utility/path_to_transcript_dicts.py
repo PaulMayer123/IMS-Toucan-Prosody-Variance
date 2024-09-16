@@ -474,22 +474,19 @@ def build_path_to_transcript_dict_vctk(re_cache=False):
     return torch.load(cache_path)
 
 
-def build_path_to_transcript_dict_libritts_all_clean(re_cache=False):
+def build_path_to_transcript_libritts_all_clean():
     root = "/mount/resources/speech/corpora/LibriTTS_R/"
-    cache_path = os.path.join(root, "pttd_cache.pt")
-    if not os.path.exists(cache_path) or re_cache:
-        path_train = "/mount/resources/speech/corpora/LibriTTS_R/"  # using all files from the "clean" subsets from LibriTTS-R https://arxiv.org/abs/2305.18802
-        path_to_transcript = dict()
-        for speaker in os.listdir(path_train):
-            for chapter in os.listdir(os.path.join(path_train, speaker)):
-                for file in os.listdir(os.path.join(path_train, speaker, chapter)):
-                    if file.endswith("normalized.txt"):
-                        with open(os.path.join(path_train, speaker, chapter, file), 'r', encoding='utf8') as tf:
-                            transcript = tf.read()
-                        wav_file = file.split(".")[0] + ".wav"
-                        path_to_transcript[os.path.join(path_train, speaker, chapter, wav_file)] = transcript
-        torch.save(path_to_transcript, cache_path)
-    return torch.load(cache_path)
+    path_train = "/mount/resources/speech/corpora/LibriTTS_R/"  # using all files from the "clean" subsets from LibriTTS-R https://arxiv.org/abs/2305.18802
+    path_to_transcript = dict()
+    for speaker in os.listdir(path_train):
+        for chapter in os.listdir(os.path.join(path_train, speaker)):
+            for file in os.listdir(os.path.join(path_train, speaker, chapter)):
+                if file.endswith("normalized.txt"):
+                    with open(os.path.join(path_train, speaker, chapter, file), 'r', encoding='utf8') as tf:
+                        transcript = tf.read()
+                    wav_file = file.split(".")[0] + ".wav"
+                    path_to_transcript[os.path.join(path_train, speaker, chapter, wav_file)] = transcript
+    return path_to_transcript
 
 def build_path_to_transcript_dict_libritts_one_speaker(re_cache=False):
     root = "/mount/arbeitsdaten/synthesis/mayerpl/IMS-Toucan-Prosody-Variance/audios/speaker_dataset/libritts_one"

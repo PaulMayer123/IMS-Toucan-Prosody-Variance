@@ -49,7 +49,8 @@ def train_loop(net,
                use_wandb,
                train_sampler,
                gpu_count,
-               steps_per_checkpoint
+               steps_per_checkpoint,
+               architecture="CFM"
                ):
     """
     see train loop arbiter for explanations of the arguments
@@ -65,7 +66,7 @@ def train_loop(net,
     if steps < warmup_steps * 5:
         print(f"too much warmup given the amount of steps, reducing warmup to {warmup_steps} steps")
         warmup_steps = steps // 5
-
+        
     torch.multiprocessing.set_sharing_strategy('file_system')
     batch_sampler_train = torch.utils.data.BatchSampler(train_sampler, batch_size, drop_last=True)
     train_loader = DataLoader(dataset=train_dataset,
@@ -108,7 +109,7 @@ def train_loop(net,
         net.train()
         epoch += 1
         for batch in tqdm(train_loader):
-
+            
             text_tensors = batch[0].to(device)
             text_lengths = batch[1].squeeze().to(device)
             speech_indexes = batch[2]
@@ -131,20 +132,66 @@ def train_loop(net,
 
             train_loss = 0.0
             utterance_embedding = batch[9].to(device)
-            if net.config["prosody_order"] != "all":
-                regression_loss, stochastic_loss, duration_loss, pitch_loss, energy_loss = net(
-                    text_tensors=text_tensors,
-                    text_lengths=text_lengths,
-                    gold_speech=gold_speech,
-                    speech_lengths=speech_lengths,
-                    gold_durations=gold_durations,
-                    gold_pitch=gold_pitch,
-                    gold_energy=gold_energy,
-                    utterance_embedding=utterance_embedding,
-                    lang_ids=lang_ids,
-                    return_feats=False,
-                    run_stochastic=run_stochastic
-                )
+            config = getattr(net, "config", None)
+            if config is not None:
+                if net.config["prosody_order"] != "all":
+                    regression_loss, stochastic_loss, duration_loss, pitch_loss, energy_loss = net(
+                        text_tensors=text_tensors,
+                        text_lengths=text_lengths,
+                        gold_speech=gold_speech,
+                        speech_lengths=speech_lengths,
+                        gold_durations=gold_durations,
+                        gold_pitch=gold_pitch,
+                        gold_energy=gold_energy,
+                        utterance_embedding=utterance_embedding,
+                        lang_ids=lang_ids,
+                        return_feats=False,
+                        run_stochastic=run_stochastic
+                    )
+                    if torch.isnan(regression_loss) or torch.isnan(duration_loss) or torch.isnan(pitch_loss) or torch.isnan(energy_loss):
+                        print("One of the losses turned to NaN! Skipping this batch ...")
+                        continue
+
+                    train_loss = train_loss + duration_loss
+                    train_loss = train_loss + pitch_loss
+                    train_loss = train_loss + energy_loss
+
+                    duration_losses_total.append(duration_loss.item())
+                    pitch_losses_total.append(pitch_loss.item())
+                    energy_losses_total.append(energy_loss.item())
+                else:
+                    
+                    regression_loss, stochastic_loss, prosody_loss = net(
+                        text_tensors=text_tensors,
+                        text_lengths=text_lengths,
+                        gold_speech=gold_speech,
+                        speech_lengths=speech_lengths,
+                        gold_durations=gold_durations,
+                        gold_pitch=gold_pitch,
+                        gold_energy=gold_energy,
+                        utterance_embedding=utterance_embedding,
+                        lang_ids=lang_ids,
+                        return_feats=False,
+                        run_stochastic=run_stochastic
+                        )
+                    if torch.isnan(regression_loss) or torch.isnan(prosody_loss):
+                        print("One of the losses turned to NaN! Skipping this batch ...")
+                        continue
+            
+                    train_loss = train_loss + prosody_loss
+                    prosody_losses_total.append(prosody_loss.item())
+            else:
+                
+                loss = net(
+                            text_tensors=text_tensors,
+                            text_lengths=text_lengths,
+                            gold_speech=gold_speech,
+                            speech_lengths=speech_lengths,
+                            gold_durations=gold_durations,
+                            gold_pitch=gold_pitch,
+                            gold_energy=gold_energy,
+                            utterance_embedding=utterance_embedding
+                        )
                 if torch.isnan(regression_loss) or torch.isnan(duration_loss) or torch.isnan(pitch_loss) or torch.isnan(energy_loss):
                     print("One of the losses turned to NaN! Skipping this batch ...")
                     continue
@@ -156,26 +203,6 @@ def train_loop(net,
                 duration_losses_total.append(duration_loss.item())
                 pitch_losses_total.append(pitch_loss.item())
                 energy_losses_total.append(energy_loss.item())
-            else:
-                regression_loss, stochastic_loss, prosody_loss = net(
-                    text_tensors=text_tensors,
-                    text_lengths=text_lengths,
-                    gold_speech=gold_speech,
-                    speech_lengths=speech_lengths,
-                    gold_durations=gold_durations,
-                    gold_pitch=gold_pitch,
-                    gold_energy=gold_energy,
-                    utterance_embedding=utterance_embedding,
-                    lang_ids=lang_ids,
-                    return_feats=False,
-                    run_stochastic=run_stochastic
-                    )
-                if torch.isnan(regression_loss) or torch.isnan(prosody_loss):
-                    print("One of the losses turned to NaN! Skipping this batch ...")
-                    continue
-
-                train_loss = train_loss + prosody_loss
-                prosody_losses_total.append(prosody_loss.item())
 
             regression_losses_total.append(regression_loss.item())
             train_loss = train_loss + regression_loss
@@ -258,7 +285,7 @@ def train_loop(net,
                         }, step=step_counter)
 
                     checkpoint_paths = get_n_recent_checkpoints_paths(checkpoint_dir=save_directory, n=1)
-                    averaged_model, default_embed = average_checkpoints(checkpoint_paths, load_func=load_net_toucan)
+                    averaged_model, default_embed = average_checkpoints(checkpoint_paths, load_func=load_net_toucan, architecture=architecture)
                     save_model_for_use(model=averaged_model, default_embed=default_embed, name=os.path.join(save_directory, "best.pt"))
 
                     if step_counter > steps:
